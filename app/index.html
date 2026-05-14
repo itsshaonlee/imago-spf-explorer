@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SPF Explorer — Imago UKRI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+
+    <header id="topbar">
+      <div id="brand">
+        <img src="../assets/Imago-logo.png" alt="Imago UKRI">
+        <h1>SPF Explorer</h1>
+      </div>
+      <div id="year-selector">
+        <button id="year-prev" aria-label="Previous year">&#8249;</button>
+        <span id="year-display">2025</span>
+        <button id="year-next" aria-label="Next year">&#8250;</button>
+      </div>
+    </header>
+
+    <div id="main">
+
+      <aside id="sidebar">
+        <div id="sidebar-handle" role="button" aria-label="Toggle sidebar"></div>
+
+        <div id="search-container">
+          <input
+            id="search-input"
+            type="text"
+            placeholder="Search area name or code…"
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <div id="search-results" style="display:none"></div>
+        </div>
+
+        <button id="geo-btn" class="sidebar-btn">&#9728; Find sunny near me</button>
+        <p id="geo-msg"></p>
+
+        <div id="decile-section">
+          <h3>Jump to decile</h3>
+          <div id="decile-grid"></div>
+          <p class="decile-hint">1 = most cloud &nbsp;·&nbsp; 10 = most sun</p>
+        </div>
+
+        <div id="legend-section">
+          <h3>Legend</h3>
+          <div id="legend">
+            <div class="legend-row"><span class="legend-swatch" style="background:#FF8F42"></span><span>Decile 9–10 (most sun)</span></div>
+            <div class="legend-row"><span class="legend-swatch" style="background:#8EC840"></span><span>Decile 7–8</span></div>
+            <div class="legend-row"><span class="legend-swatch" style="background:#03CEA3"></span><span>Decile 4–6</span></div>
+            <div class="legend-row"><span class="legend-swatch" style="background:#1877CF"></span><span>Decile 2–3</span></div>
+            <div class="legend-row"><span class="legend-swatch" style="background:#24226F"></span><span>Decile 1 (most cloud)</span></div>
+          </div>
+        </div>
+
+        <button id="reset-btn" class="sidebar-btn">Reset view</button>
+      </aside>
+
+      <div id="map"></div>
+
+      <div id="info-panel" class="hidden">
+        <button id="info-close" aria-label="Close">&times;</button>
+        <h2 id="info-name"></h2>
+        <p id="info-code" class="info-code"></p>
+        <div class="info-stat">
+          <span class="info-stat-label">Cloud probability</span>
+          <span id="info-value" class="info-stat-value"></span>
+        </div>
+        <div class="info-stat">
+          <span class="info-stat-label">National decile</span>
+          <span id="info-decile" class="info-stat-value"></span>
+        </div>
+        <p class="info-peers-note" id="info-peers-note"></p>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

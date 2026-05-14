@@ -205,3 +205,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# GeoPackages — large binary files, stored externally
+*.gpkg
+
+# Pipeline intermediates — large, not committed
+data/processed/spf_all_years.csv
+data/processed/boundaries.geojson
+data/processed/tiles.mbtiles
