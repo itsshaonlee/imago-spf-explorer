@@ -1,9 +1,9 @@
 // SPF Explorer — main.js
 
-const DATA_PATH  = '../data/processed/spf-data.json';
-const TILES_PATH = '../tiles/{z}/{x}/{y}.pbf';
-const UK_CENTER  = [-3.0, 55.0];
-const UK_ZOOM    = 5;
+const DATA_PATH     = '../data/processed/spf-data.json';
+const PMTILES_PATH  = '../tiles/lsoa.pmtiles';
+const UK_CENTER     = [-3.0, 55.0];
+const UK_ZOOM       = 5;
 const GEO_RADIUS_KM = 10;
 
 const DECILE_COLORS = {
@@ -42,6 +42,24 @@ const infoPeersNote = document.getElementById('info-peers-note');
 const infoClose     = document.getElementById('info-close');
 const sidebar       = document.getElementById('sidebar');
 const sidebarHandle = document.getElementById('sidebar-handle');
+
+// ── PMTiles URL ───────────────────────────────────────────────────────────────
+
+function resolvePmtilesUrl() {
+  // Manually resolve ../tiles/lsoa.pmtiles to an absolute URL so
+  // new URL() percent-encoding of the path doesn't cause issues.
+  const parts = window.location.href.split('?')[0].replace(/\/[^/]*$/, '').split('/');
+  for (const seg of PMTILES_PATH.split('/')) {
+    if (seg === '..') parts.pop();
+    else if (seg) parts.push(seg);
+  }
+  return 'pmtiles://' + parts.join('/');
+}
+
+// ── PMTiles protocol ──────────────────────────────────────────────────────────
+
+const pmtilesProtocol = new pmtiles.Protocol();
+maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile.bind(pmtilesProtocol));
 
 // ── Map ───────────────────────────────────────────────────────────────────────
 
@@ -95,17 +113,16 @@ async function loadData() {
   }
 }
 
-// ── Choropleth ────────────────────────────────────────────────────────────────
+// ── Feature-state choropleth ──────────────────────────────────────────────────
 
-function buildColorExpression(year) {
-  // match on data_zone_code → decile colour; falls back to neutral grey
-  const expr = ['match', ['get', 'data_zone_code']];
+function applyYearStates(year) {
   for (const [code, area] of Object.entries(spfData.areas)) {
     const yd = area[year];
-    if (yd) expr.push(code, DECILE_COLORS[yd.decile]);
+    map.setFeatureState(
+      { source: 'lsoa', sourceLayer: 'lsoa', id: code },
+      { color: yd ? DECILE_COLORS[yd.decile] : null },
+    );
   }
-  expr.push('#44445a');
-  return expr;
 }
 
 // ── Filter helpers ────────────────────────────────────────────────────────────
@@ -121,32 +138,21 @@ function codesFilter(codes) {
 
 // ── Layer setup ───────────────────────────────────────────────────────────────
 
-function resolveTileUrl() {
-  // Build absolute URL without new URL() which would percent-encode {z}/{x}/{y}
-  const parts = window.location.href.replace(/\/[^/]*$/, '').split('/');
-  for (const seg of TILES_PATH.split('/')) {
-    if (seg === '..') parts.pop();
-    else if (seg) parts.push(seg);
-  }
-  return parts.join('/');
-}
-
 function setupLayers() {
   map.addSource('lsoa', {
     type: 'vector',
-    tiles: [resolveTileUrl()],
-    minzoom: 5,
-    maxzoom: 14,
+    url: resolvePmtilesUrl(),
+    promoteId: { 'lsoa': 'data_zone_code' },
   });
 
-  // Choropleth fill
+  // Choropleth fill — colour driven by feature-state set in applyYearStates()
   map.addLayer({
     id: 'lsoa-fill',
     type: 'fill',
     source: 'lsoa',
     'source-layer': 'lsoa',
     paint: {
-      'fill-color': buildColorExpression(currentYear),
+      'fill-color': ['coalesce', ['feature-state', 'color'], '#44445a'],
       'fill-opacity': 0.75,
     },
   });
@@ -203,6 +209,9 @@ function setupLayers() {
 
   map.on('mouseenter', 'lsoa-fill', () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', 'lsoa-fill', () => { map.getCanvas().style.cursor = ''; });
+
+  // Apply initial colour states immediately after source is registered
+  applyYearStates(currentYear);
 }
 
 // ── Year ──────────────────────────────────────────────────────────────────────
@@ -212,7 +221,7 @@ function applyYear(year) {
   yearDisplay.textContent = year;
   syncYearButtons();
   if (map.getLayer('lsoa-fill')) {
-    map.setPaintProperty('lsoa-fill', 'fill-color', buildColorExpression(year));
+    applyYearStates(year);
   }
   clearSelection();
 }
@@ -449,9 +458,7 @@ function restoreURLState() {
     currentYear = yearParam;
     yearDisplay.textContent = yearParam;
     syncYearButtons();
-    if (map.getLayer('lsoa-fill')) {
-      map.setPaintProperty('lsoa-fill', 'fill-color', buildColorExpression(yearParam));
-    }
+    applyYearStates(yearParam);
   }
 
   const area = params.get('area');
@@ -470,7 +477,6 @@ sidebarHandle.addEventListener('click', () => sidebar.classList.toggle('expanded
 async function init() {
   await loadData();
 
-  // Resolve currentYear to a valid year from the data
   if (!spfData.meta.years.includes(currentYear)) {
     currentYear = spfData.meta.years.at(-1);
   }

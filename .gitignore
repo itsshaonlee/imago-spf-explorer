@@ -209,6 +209,10 @@ __marimo__/
 # GeoPackages — large binary files, stored externally
 *.gpkg
 
+# Individual vector tiles — replaced by lsoa.pmtiles
+tiles/**/*.pbf
+tiles/**/metadata.json
+
 # Pipeline intermediates — large, not committed
 data/processed/spf_all_years.csv
 data/processed/boundaries.geojson
