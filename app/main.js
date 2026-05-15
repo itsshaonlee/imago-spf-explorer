@@ -213,8 +213,10 @@ function setupLayers() {
   map.on('mouseenter', 'lsoa-fill', () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', 'lsoa-fill', () => { map.getCanvas().style.cursor = ''; });
 
-  // Apply initial colour states immediately after source is registered
+  // Apply colour states now (buffered by MapLibre) and again after first idle
+  // so states are guaranteed to render even if tiles loaded before the initial call.
   applyYearStates(currentYear);
+  map.once('idle', () => applyYearStates(currentYear));
 }
 
 // ── Year ──────────────────────────────────────────────────────────────────────
