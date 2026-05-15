@@ -307,6 +307,51 @@ body {
 
 #geo-msg { font-size: 0.78rem; color: var(--grey); min-height: 1rem; line-height: 1.4; margin-top: 0.4rem; }
 
+#geo-results { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.5rem; }
+
+.geo-result-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.geo-result-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.1); }
+
+.geo-result-icon { font-size: 1.25rem; flex-shrink: 0; line-height: 1; }
+
+.geo-result-info { flex: 1; min-width: 0; }
+
+.geo-result-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.geo-result-meta { font-size: 0.72rem; color: var(--grey); margin-top: 0.1rem; }
+
+#geo-weather {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  padding: 0.45rem 0.65rem;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  border-left: 3px solid var(--grey);
+  margin-top: 0.4rem;
+  display: none;
+}
+
+#geo-weather.sunny  { border-left-color: #ffd54f; color: #ffd54f; }
+#geo-weather.partial { border-left-color: #90caf9; color: var(--light-grey); }
+#geo-weather.cloudy  { border-left-color: var(--grey); color: var(--grey); }
+
 /* ── Decile section ─────────────────────────────────────── */
 
 #decile-section h3,

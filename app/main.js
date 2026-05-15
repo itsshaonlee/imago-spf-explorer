@@ -38,6 +38,7 @@ const geoPlaceInput = document.getElementById('geo-place-input');
 const geoPlaceBtn   = document.getElementById('geo-place-btn');
 const geoLocateBtn  = document.getElementById('geo-locate-btn');
 const geoMsg        = document.getElementById('geo-msg');
+const geoResults    = document.getElementById('geo-results');
 const decileGrid    = document.getElementById('decile-grid');
 const resetBtn      = document.getElementById('reset-btn');
 const infoPanel     = document.getElementById('info-panel');
@@ -394,29 +395,79 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Returns up to 10 closest top-decile areas within GEO_RADIUS_KM, sorted by distance.
 function findSunnyNear(lat, lon, label = 'your location') {
-  const nearby = [];
+  geoResults.innerHTML = '';
+  const candidates = [];
   for (const [code, area] of Object.entries(spfData.areas)) {
     if (area.lat == null || area.lon == null) continue;
     const yd = area[currentYear];
     if (!yd || yd.decile !== 10) continue;
-    if (haversineKm(lat, lon, area.lat, area.lon) <= GEO_RADIUS_KM) nearby.push(code);
+    const distKm = haversineKm(lat, lon, area.lat, area.lon);
+    if (distKm <= GEO_RADIUS_KM) candidates.push({ code, area, distKm });
   }
+  candidates.sort((a, b) => a.distKm - b.distKm);
+  const nearest = candidates.slice(0, 10);
 
   map.flyTo({ center: [lon, lat], zoom: 11, speed: 1.4 });
 
-  if (nearby.length) {
-    selectedCode = null;
-    activeDecile = 10;
-    map.setFilter('lsoa-selected', neverFilter());
-    map.setFilter('lsoa-peers', codesFilter(nearby));
-    map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.45);
-    updateChips(10);
-    geoMsg.textContent =
-      `${nearby.length} sunniest area${nearby.length !== 1 ? 's' : ''} within ${GEO_RADIUS_KM} km of ${label}`;
-  } else {
+  if (!nearest.length) {
     geoMsg.textContent = `No top-decile areas within ${GEO_RADIUS_KM} km of ${label}.`;
+    return [];
   }
+
+  selectedCode = null;
+  activeDecile = 10;
+  map.setFilter('lsoa-selected', neverFilter());
+  map.setFilter('lsoa-peers', codesFilter(nearest.map(c => c.code)));
+  map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.45);
+  updateChips(10);
+
+  const total = candidates.length;
+  geoMsg.textContent =
+    `${total} top-decile area${total !== 1 ? 's' : ''} within ${GEO_RADIUS_KM} km of ${label} — fetching weather…`;
+
+  return nearest;
+}
+
+function cloudIcon(cloud, isDay) {
+  if (!isDay) return '🌙';
+  if (cloud <= 20) return '☀️';
+  if (cloud <= 50) return '⛅';
+  if (cloud <= 80) return '🌥️';
+  return '☁️';
+}
+
+async function fetchWeatherForAreas(areas) {
+  return Promise.all(
+    areas.map(({ area }) =>
+      fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${area.lat}&longitude=${area.lon}` +
+        `&current=cloud_cover,is_day&timezone=auto&forecast_days=1`,
+      )
+        .then(r => r.json())
+        .then(d => d.current)
+        .catch(() => null),
+    ),
+  );
+}
+
+function renderGeoResults(nearest, weatherData) {
+  geoMsg.textContent = `${nearest.length} closest top-decile area${nearest.length !== 1 ? 's' : ''} — current weather:`;
+  geoResults.innerHTML = nearest.map(({ code, area, distKm }, i) => {
+    const w = weatherData[i];
+    const icon = w ? cloudIcon(w.cloud_cover, w.is_day) : '—';
+    const meta = w
+      ? `${distKm.toFixed(1)} km · ${w.cloud_cover}% cloud`
+      : `${distKm.toFixed(1)} km · weather unavailable`;
+    return `<div class="geo-result-item" data-code="${code}">
+      <span class="geo-result-icon">${icon}</span>
+      <div class="geo-result-info">
+        <div class="geo-result-name">${area.name || code}</div>
+        <div class="geo-result-meta">${meta}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 async function geocodePlace(query) {
@@ -432,18 +483,29 @@ async function geocodePlace(query) {
   };
 }
 
+async function runGeoSearch(lat, lon, label) {
+  const nearest = findSunnyNear(lat, lon, label);
+  if (!nearest.length) return;
+  try {
+    const weatherData = await fetchWeatherForAreas(nearest);
+    renderGeoResults(nearest, weatherData);
+  } catch {
+    geoMsg.textContent = geoMsg.textContent.replace(' — fetching weather…', '');
+  }
+}
+
 async function handlePlaceSearch() {
   const q = geoPlaceInput.value.trim();
   if (!q) return;
   geoMsg.textContent = 'Searching…';
+  geoResults.innerHTML = '';
   try {
     const place = await geocodePlace(q);
     if (!place) {
       geoMsg.textContent = 'Place not found — try a different name or postcode.';
       return;
     }
-    geoMsg.textContent = '';
-    findSunnyNear(place.lat, place.lon, place.name);
+    await runGeoSearch(place.lat, place.lon, place.name);
   } catch {
     geoMsg.textContent = 'Could not search — check your connection.';
   }
@@ -452,17 +514,20 @@ async function handlePlaceSearch() {
 geoPlaceBtn.addEventListener('click', handlePlaceSearch);
 geoPlaceInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handlePlaceSearch(); });
 
+geoResults.addEventListener('click', (e) => {
+  const item = e.target.closest('.geo-result-item');
+  if (item) selectArea(item.dataset.code, true);
+});
+
 geoLocateBtn.addEventListener('click', () => {
   if (!navigator.geolocation) {
     geoMsg.textContent = 'Geolocation is not supported by your browser.';
     return;
   }
   geoMsg.textContent = 'Finding your location…';
+  geoResults.innerHTML = '';
   navigator.geolocation.getCurrentPosition(
-    ({ coords: { latitude: lat, longitude: lon } }) => {
-      geoMsg.textContent = '';
-      findSunnyNear(lat, lon);
-    },
+    ({ coords: { latitude: lat, longitude: lon } }) => runGeoSearch(lat, lon),
     (err) => {
       const msgs = { 1: 'Location access was denied.', 2: 'Location unavailable.', 3: 'Request timed out.' };
       geoMsg.textContent = msgs[err.code] || 'Could not determine your location.';
