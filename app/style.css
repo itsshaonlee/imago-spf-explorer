@@ -445,15 +445,42 @@ body {
 
   #info-panel {
     position: fixed;
-    bottom: 3rem;
+    bottom: 0;
     left: 0;
     right: 0;
     width: 100%;
-    max-height: 52dvh;
+    max-height: 70dvh;
     border-left: none;
     border-top: 1px solid rgba(255,255,255,0.1);
-    z-index: 25;
+    z-index: 30;
+    padding-top: 0.75rem;
   }
+
+  /* drag handle visual cue at top of info panel on mobile */
+  #info-panel::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: rgba(255,255,255,0.22);
+    border-radius: 2px;
+    margin: 0 auto 0.75rem;
+  }
+
+  /* geo results list gets its own scroll area inside the fixed-height panel */
+  #info-geo {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+  }
+
+  #geo-results {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .geo-result-item { padding: 0.65rem 0.55rem; }
 
   #reset-btn { margin-top: 0; }
 }

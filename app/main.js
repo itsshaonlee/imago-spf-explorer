@@ -261,6 +261,7 @@ function showInfoPanel(mode) {
   infoArea.classList.toggle('hidden', mode !== 'area');
   infoGeo.classList.toggle('hidden', mode !== 'geo');
   infoPanel.classList.remove('hidden');
+  sidebar.classList.remove('expanded'); // collapse sidebar on mobile so panel isn't obscured
 }
 
 // ── Selection ─────────────────────────────────────────────────────────────────
