@@ -463,6 +463,27 @@ async function fetchWeatherForAreas(areas) {
   );
 }
 
+// C) sunny at search point, but all top-decile areas are cloudy
+const IRONY_QUIPS = {
+  england: [
+    'You\'ve got the sun — your top picks haven\'t. Swings and roundabouts.',
+    'You\'re in the clear while your top deciles are under cloud. SPF\'s just an average.',
+    'Funny — you\'re sunny, they\'re not. Make of that what you will.',
+  ],
+  scotland: [
+    'Aye, you\'re sunny but your top picks are dreich. SPF\'s just an average, mind.',
+    'You\'re in the clear. Your top deciles are not. Swings and roundabouts.',
+  ],
+  wales: [
+    'You\'ve got the sun but your top deciles haven\'t. The valleys keep their secrets.',
+    'Sunny where you are, cloudy where it counts. Very SPF.',
+  ],
+  northern_ireland: [
+    'You\'re in the clear but your top picks aren\'t. Ach, sure.',
+    'Sunny for you, cloudy up top. SPF\'s just an average after all.',
+  ],
+};
+
 const NO_NEARBY_QUIPS = {
   england: [
     'No top-decile spots within 10 km. You may need to relocate.',
@@ -533,10 +554,11 @@ const CLOUDY_QUIPS = {
   ],
 };
 
-function renderGeoResults(nearest, weatherData, label, country = 'england') {
+function renderGeoResults(nearest, weatherData, label, country = 'england', searchWeather = null) {
   const n = nearest.length;
+  const searchSunny = searchWeather && searchWeather.is_day && searchWeather.cloud_cover <= 30;
+
   infoGeoTitle.textContent = `Sunny places near ${label}`;
-  infoGeoSub.textContent = `${n} closest top-decile area${n !== 1 ? 's' : ''} · live cloud cover`;
   geoMsg.textContent = `${n} area${n !== 1 ? 's' : ''} found — see results →`;
 
   const rows = nearest.map(({ code, area, distKm }, i) => {
@@ -555,17 +577,25 @@ function renderGeoResults(nearest, weatherData, label, country = 'england') {
   }).join('');
 
   const hasData = weatherData.filter(Boolean);
-  const allSunny  = hasData.length > 0 && hasData.every(w => w.is_day && w.cloud_cover <= 30);
   const allCloudy = hasData.length > 0 && hasData.every(w => w.is_day && w.cloud_cover >= 75);
-  if (allSunny) {
+
+  let subtitle;
+  if (searchSunny && allCloudy) {
+    // C) searcher is sunny, all top-decile areas are cloudy
+    const pool = IRONY_QUIPS[country] || IRONY_QUIPS.england;
+    subtitle = pool[Math.floor(Math.random() * pool.length)];
+  } else if (searchSunny) {
+    // A) searcher is sunny
     const pool = SUNNY_QUIPS[country] || SUNNY_QUIPS.england;
-    infoGeoSub.textContent = pool[Math.floor(Math.random() * pool.length)];
+    subtitle = pool[Math.floor(Math.random() * pool.length)];
   } else if (allCloudy) {
+    // D) all top-decile areas are cloudy
     const pool = CLOUDY_QUIPS[country] || CLOUDY_QUIPS.england;
-    infoGeoSub.textContent = pool[Math.floor(Math.random() * pool.length)];
+    subtitle = pool[Math.floor(Math.random() * pool.length)];
   } else {
-    infoGeoSub.textContent = `${n} closest top-decile area${n !== 1 ? 's' : ''} · live cloud cover`;
+    subtitle = `${n} closest top-decile area${n !== 1 ? 's' : ''} · live cloud cover`;
   }
+  infoGeoSub.textContent = subtitle;
 
   geoResults.innerHTML = rows;
   showInfoPanel('geo');
@@ -604,41 +634,51 @@ async function detectCountry(lat, lon) {
   return parseCountry(data.address);
 }
 
+async function fetchSearchWeather(lat, lon) {
+  const res = await fetch(
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&current=cloud_cover,is_day&timezone=auto&forecast_days=1`,
+  );
+  return (await res.json()).current;
+}
+
 async function runGeoSearch(lat, lon, label = 'your location', country = 'england') {
   const nearest = findSunnyNear(lat, lon, label);
+
+  // Fetch searcher's own weather in parallel with area weather
+  const searchWeatherPromise = fetchSearchWeather(lat, lon).catch(() => null);
+
   if (!nearest.length) {
+    const searchWeather = await searchWeatherPromise;
+    const searchSunny = searchWeather && searchWeather.is_day && searchWeather.cloud_cover <= 30;
     geoMsg.textContent = '';
     infoGeoTitle.textContent = `No top-decile areas near ${label}`;
     geoResults.innerHTML = '';
-    try {
-      const w = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-        `&current=cloud_cover,is_day&timezone=auto&forecast_days=1`,
-      ).then(r => r.json()).then(d => d.current);
 
-      if (w && w.is_day && w.cloud_cover <= 30) {
-        infoGeoSub.textContent = 'No top-decile LSOAs within 10 km — but look outside:';
-        geoResults.innerHTML = `<div class="geo-result-item">
-          <span class="geo-result-icon">${cloudIcon(w.cloud_cover, 1)}</span>
-          <div class="geo-result-info">
-            <div class="geo-result-name">It's actually sunny right now</div>
-            <div class="geo-result-meta">${w.cloud_cover}% cloud · SPF reflects long-run probability, not today's forecast</div>
-          </div>
-        </div>`;
-      } else {
-        const pool = NO_NEARBY_QUIPS[country] || NO_NEARBY_QUIPS.england;
-        infoGeoSub.textContent = pool[Math.floor(Math.random() * pool.length)];
-      }
-    } catch {
+    if (searchSunny) {
+      // B) sunny at search point but no top-decile areas nearby
+      infoGeoSub.textContent = 'No top-decile LSOAs within 10 km — but look outside:';
+      geoResults.innerHTML = `<div class="geo-result-item">
+        <span class="geo-result-icon">${cloudIcon(searchWeather.cloud_cover, 1)}</span>
+        <div class="geo-result-info">
+          <div class="geo-result-name">It's actually sunny right now</div>
+          <div class="geo-result-meta">${searchWeather.cloud_cover}% cloud · SPF reflects long-run probability, not today's forecast</div>
+        </div>
+      </div>`;
+    } else {
       const pool = NO_NEARBY_QUIPS[country] || NO_NEARBY_QUIPS.england;
       infoGeoSub.textContent = pool[Math.floor(Math.random() * pool.length)];
     }
     showInfoPanel('geo');
     return;
   }
+
   try {
-    const weatherData = await fetchWeatherForAreas(nearest);
-    renderGeoResults(nearest, weatherData, label, country);
+    const [weatherData, searchWeather] = await Promise.all([
+      fetchWeatherForAreas(nearest),
+      searchWeatherPromise,
+    ]);
+    renderGeoResults(nearest, weatherData, label, country, searchWeather);
   } catch {
     geoMsg.textContent = geoMsg.textContent.replace(' — fetching weather…', '');
   }
