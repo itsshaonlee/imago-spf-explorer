@@ -329,7 +329,7 @@ function buildDecileChips() {
     btn.textContent = d;
     btn.style.background = DECILE_COLORS[d];
     btn.style.color = d <= 6 ? '#ffffff' : '#0e0e1a';
-    btn.title = d === 1 ? 'Most cloud' : d === 10 ? 'Most sun' : `Decile ${d}`;
+    btn.title = d === 1 ? 'Most cloudy' : d === 10 ? 'Most sunny' : `Decile ${d}`;
     btn.addEventListener('click', () => highlightDecile(d));
     decileGrid.appendChild(btn);
   }
