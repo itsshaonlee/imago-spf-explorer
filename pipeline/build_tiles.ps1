@@ -11,6 +11,10 @@ $OGR = "C:\OSGeo4W\bin\ogr2ogr.exe"
 $GPKG = "data\SPF_LSOA_2023.gpkg"
 $TILES = "tiles"
 
+# Fix PROJ/GDAL conflict between OSGeo4W and conda — point to conda's newer databases
+$env:PROJ_DATA = "C:\Users\spspa\anaconda3\envs\raster_env\Library\share\proj"
+$env:GDAL_DATA = "C:\Users\spspa\anaconda3\envs\raster_env\Library\share\gdal"
+
 if (Test-Path $TILES) {
     Write-Host "Removing existing tiles/ directory..."
     Remove-Item -Recurse -Force $TILES
