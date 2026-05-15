@@ -425,10 +425,7 @@ function findSunnyNear(lat, lon, label = 'your location') {
 
   map.flyTo({ center: [lon, lat], zoom: 11, speed: 1.4 });
 
-  if (!nearest.length) {
-    geoMsg.textContent = `No top-decile areas within ${GEO_RADIUS_KM} km of ${label}.`;
-    return [];
-  }
+  if (!nearest.length) return [];
 
   selectedCode = null;
   activeDecile = 10;
@@ -465,6 +462,27 @@ async function fetchWeatherForAreas(areas) {
     ),
   );
 }
+
+const NO_NEARBY_QUIPS = {
+  england: [
+    'No top-decile spots within 10 km. You may need to relocate.',
+    'Nothing in the top decile nearby. Might be time to move.',
+    'Not a sunny LSOA in sight. England, innit.',
+  ],
+  scotland: [
+    'Nae luck nearby. Try further south, maybe.',
+    'Not a sunny LSOA for miles. Fairly on-brand.',
+    'Aye, nothing. Classic.',
+  ],
+  wales: [
+    'No sunny spots within 10 km. The clouds are thorough today.',
+    'Nothing nearby in the top decile. Very Welsh.',
+  ],
+  northern_ireland: [
+    'No luck nearby. Sure, what did you expect?',
+    'Nowt in the top decile nearby. You\'re on your own.',
+  ],
+};
 
 const SUNNY_QUIPS = {
   england: [
@@ -588,7 +606,36 @@ async function detectCountry(lat, lon) {
 
 async function runGeoSearch(lat, lon, label = 'your location', country = 'england') {
   const nearest = findSunnyNear(lat, lon, label);
-  if (!nearest.length) return;
+  if (!nearest.length) {
+    geoMsg.textContent = '';
+    infoGeoTitle.textContent = `No top-decile areas near ${label}`;
+    geoResults.innerHTML = '';
+    try {
+      const w = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+        `&current=cloud_cover,is_day&timezone=auto&forecast_days=1`,
+      ).then(r => r.json()).then(d => d.current);
+
+      if (w && w.is_day && w.cloud_cover <= 30) {
+        infoGeoSub.textContent = 'No top-decile LSOAs within 10 km — but look outside:';
+        geoResults.innerHTML = `<div class="geo-result-item">
+          <span class="geo-result-icon">${cloudIcon(w.cloud_cover, 1)}</span>
+          <div class="geo-result-info">
+            <div class="geo-result-name">It's actually sunny right now</div>
+            <div class="geo-result-meta">${w.cloud_cover}% cloud · SPF reflects long-run probability, not today's forecast</div>
+          </div>
+        </div>`;
+      } else {
+        const pool = NO_NEARBY_QUIPS[country] || NO_NEARBY_QUIPS.england;
+        infoGeoSub.textContent = pool[Math.floor(Math.random() * pool.length)];
+      }
+    } catch {
+      const pool = NO_NEARBY_QUIPS[country] || NO_NEARBY_QUIPS.england;
+      infoGeoSub.textContent = pool[Math.floor(Math.random() * pool.length)];
+    }
+    showInfoPanel('geo');
+    return;
+  }
   try {
     const weatherData = await fetchWeatherForAreas(nearest);
     renderGeoResults(nearest, weatherData, label, country);
