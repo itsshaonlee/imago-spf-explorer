@@ -163,6 +163,19 @@ function setupLayers() {
     },
   });
 
+  // Highlighted areas — full opacity fill on top of the dimmed base
+  map.addLayer({
+    id: 'lsoa-highlight',
+    type: 'fill',
+    source: 'lsoa',
+    'source-layer': 'lsoa',
+    paint: {
+      'fill-color': ['coalesce', ['feature-state', 'color'], '#44445a'],
+      'fill-opacity': 0.9,
+    },
+    filter: neverFilter(),
+  });
+
   // Subtle boundary lines at higher zoom
   map.addLayer({
     id: 'lsoa-outline',
@@ -174,20 +187,6 @@ function setupLayers() {
       'line-color': 'rgba(255,255,255,0.09)',
       'line-width': 0.4,
     },
-  });
-
-  // Peer highlight outlines (teal)
-  map.addLayer({
-    id: 'lsoa-peers',
-    type: 'line',
-    source: 'lsoa',
-    'source-layer': 'lsoa',
-    paint: {
-      'line-color': '#03CEA3',
-      'line-width': 1.5,
-      'line-opacity': 0.9,
-    },
-    filter: neverFilter(),
   });
 
   // Selected area outline (white)
@@ -267,8 +266,8 @@ function selectArea(code, fly = false) {
   const count  = peers.length;
 
   map.setFilter('lsoa-selected', ['==', ['get', 'data_zone_code'], code]);
-  map.setFilter('lsoa-peers', codesFilter(peers));
-  map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.45);
+  map.setFilter('lsoa-highlight', codesFilter(peers));
+  map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.35);
 
   updateChips(decile);
 
@@ -295,7 +294,7 @@ function clearSelection() {
 
   if (map.getLayer('lsoa-selected')) {
     map.setFilter('lsoa-selected', neverFilter());
-    map.setFilter('lsoa-peers', neverFilter());
+    map.setFilter('lsoa-highlight', neverFilter());
     map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.75);
   }
 
@@ -332,10 +331,10 @@ function highlightDecile(decile) {
   activeDecile = decile;
 
   const peers = decileIndex[currentYear][decile] || [];
-  if (map.getLayer('lsoa-peers')) {
+  if (map.getLayer('lsoa-highlight')) {
     map.setFilter('lsoa-selected', neverFilter());
-    map.setFilter('lsoa-peers', codesFilter(peers));
-    map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.45);
+    map.setFilter('lsoa-highlight', codesFilter(peers));
+    map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.35);
   }
 
   updateChips(decile);
@@ -419,8 +418,8 @@ function findSunnyNear(lat, lon, label = 'your location') {
   selectedCode = null;
   activeDecile = 10;
   map.setFilter('lsoa-selected', neverFilter());
-  map.setFilter('lsoa-peers', codesFilter(nearest.map(c => c.code)));
-  map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.45);
+  map.setFilter('lsoa-highlight', codesFilter(nearest.map(c => c.code)));
+  map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.35);
   updateChips(10);
 
   const total = candidates.length;
