@@ -544,7 +544,7 @@ function renderGeoResults(nearest, weatherData, label, country = 'england') {
     const icon = w ? cloudIcon(w.cloud_cover, w.is_day) : '—';
     const meta = w
       ? `${distKm.toFixed(1)} km · ${w.cloud_cover}% cloud`
-      : `${distKm.toFixed(1)} km · weather unavailable`;
+      : `${distKm.toFixed(1)} km · the meteorologist appears to have lost their way`;
     return `<div class="geo-result-item" data-code="${code}">
       <span class="geo-result-icon">${icon}</span>
       <div class="geo-result-info">
