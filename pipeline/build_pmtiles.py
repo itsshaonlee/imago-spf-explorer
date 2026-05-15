@@ -1,6 +1,6 @@
 """Convert tiles/ directory (z/x/y.pbf) to a single lsoa.pmtiles file."""
 
-import brotli
+import gzip
 from pathlib import Path
 
 from pmtiles.writer import write, Compression
@@ -46,11 +46,11 @@ def main():
             if i % 20000 == 0:
                 pct = i * 100 // total
                 print(f"  {i:,} / {total:,}  ({pct}%)", end="\r", flush=True)
-            writer.write_tile(tile_id, brotli.compress(path.read_bytes(), quality=9))
+            writer.write_tile(tile_id, gzip.compress(path.read_bytes(), compresslevel=9))
 
         header = {
             "tile_type": TileType.MVT,
-            "tile_compression": Compression.BROTLI,
+            "tile_compression": Compression.GZIP,
             "min_lon_e7": int(-9.0 * 1e7),
             "min_lat_e7": int(49.5 * 1e7),
             "max_lon_e7": int(2.1 * 1e7),

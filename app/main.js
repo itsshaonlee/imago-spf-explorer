@@ -70,11 +70,11 @@ const map = new maplibregl.Map({
     sources: {
       carto: {
         type: 'raster',
-        tiles: [
-          'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png',
-        ],
+        // ESRI World Dark Gray — free, no API key, CORS enabled
+        // Note: ESRI tile URLs use {z}/{y}/{x} order (row before column)
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'],
         tileSize: 256,
-        attribution: '© <a href="https://stadiamaps.com/">Stadia Maps</a> © <a href="https://openmaptiles.org/">OpenMapTiles</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        attribution: '© <a href="https://www.esri.com/">Esri</a>',
       },
     },
     layers: [{ id: 'carto-base', type: 'raster', source: 'carto' }],
@@ -86,7 +86,7 @@ const map = new maplibregl.Map({
 
 map.addControl(
   new maplibregl.AttributionControl({
-    customAttribution: '© Stadia Maps · ONS Open Geography · Imago UKRI',
+    customAttribution: '© Esri · ONS Open Geography · Imago UKRI',
   }),
   'bottom-right',
 );
