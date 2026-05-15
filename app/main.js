@@ -521,13 +521,14 @@ function renderGeoResults(nearest, weatherData, label, country = 'england') {
 
   const hasData = weatherData.filter(Boolean);
   const allCloudy = hasData.length > 0 && hasData.every(w => w.is_day && w.cloud_cover >= 75);
-  let quip = '';
   if (allCloudy) {
     const pool = CLOUDY_QUIPS[country] || CLOUDY_QUIPS.england;
-    quip = `<p class="geo-quip">${pool[Math.floor(Math.random() * pool.length)]}</p>`;
+    infoGeoSub.textContent = pool[Math.floor(Math.random() * pool.length)];
+  } else {
+    infoGeoSub.textContent = `${n} closest top-decile area${n !== 1 ? 's' : ''} · live cloud cover`;
   }
 
-  geoResults.innerHTML = rows + quip;
+  geoResults.innerHTML = rows;
   showInfoPanel('geo');
 }
 
