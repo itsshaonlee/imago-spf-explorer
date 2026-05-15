@@ -466,13 +466,45 @@ async function fetchWeatherForAreas(areas) {
   );
 }
 
-function renderGeoResults(nearest, weatherData, label) {
+const CLOUDY_QUIPS = {
+  england: [
+    'Not a patch of blue sky in sight. Quintessentially English.',
+    'Overcast from coast to coast. England delivers.',
+    'Blimey. Not exactly the Algarve, is it?',
+    'Right then. Perhaps try the Canaries instead.',
+    'Well. At least it\'s not raining. Probably.',
+  ],
+  scotland: [
+    'Dreich, as they say up here.',
+    'Aye, it\'s grim out there. Very Scottish.',
+    'Solid grey. The Scots call this summer.',
+    'Nae sun to be found. Classic.',
+  ],
+  wales: [
+    'Solid grey from the valleys to the coast. Very Wales.',
+    'Cymru am byth — and also, apparently, clouds.',
+    'Typical Welsh weather, by the look of it.',
+  ],
+  northern_ireland: [
+    'Grand soft day, as they say.',
+    'Overcast from Belfast to the Glens. As expected.',
+    'Classic Northern Ireland. Wouldn\'t have it any other way.',
+  ],
+  ireland: [
+    'Grand soft day, isn\'t it.',
+    'Sure, what do you expect? It\'s Ireland.',
+    'Not a sunbeam to be had. Ah well.',
+    'Overcast all round. Sure, it\'ll clear up later.',
+  ],
+};
+
+function renderGeoResults(nearest, weatherData, label, country = 'england') {
   const n = nearest.length;
   infoGeoTitle.textContent = `Sunny places near ${label}`;
   infoGeoSub.textContent = `${n} closest top-decile area${n !== 1 ? 's' : ''} · live cloud cover`;
   geoMsg.textContent = `${n} area${n !== 1 ? 's' : ''} found — see results →`;
 
-  geoResults.innerHTML = nearest.map(({ code, area, distKm }, i) => {
+  const rows = nearest.map(({ code, area, distKm }, i) => {
     const w = weatherData[i];
     const icon = w ? cloudIcon(w.cloud_cover, w.is_day) : '—';
     const meta = w
@@ -487,28 +519,58 @@ function renderGeoResults(nearest, weatherData, label) {
     </div>`;
   }).join('');
 
+  const hasData = weatherData.filter(Boolean);
+  const allCloudy = hasData.length > 0 && hasData.every(w => w.is_day && w.cloud_cover >= 75);
+  let quip = '';
+  if (allCloudy) {
+    const pool = CLOUDY_QUIPS[country] || CLOUDY_QUIPS.england;
+    quip = `<p class="geo-quip">${pool[Math.floor(Math.random() * pool.length)]}</p>`;
+  }
+
+  geoResults.innerHTML = rows + quip;
   showInfoPanel('geo');
 }
 
+function parseCountry(addr = {}) {
+  if (addr.country_code === 'ie') return 'ireland';
+  const state = (addr.state || '').toLowerCase();
+  if (state.includes('scotland'))         return 'scotland';
+  if (state.includes('wales') || state.includes('cymru')) return 'wales';
+  if (state.includes('northern ireland')) return 'northern_ireland';
+  return 'england';
+}
+
 async function geocodePlace(query) {
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=gb`;
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=gb,ie&addressdetails=1`;
   const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
   if (!res.ok) throw new Error(`Geocoding failed (${res.status})`);
   const results = await res.json();
   if (!results.length) return null;
+  const r = results[0];
   return {
-    lat: parseFloat(results[0].lat),
-    lon: parseFloat(results[0].lon),
-    name: results[0].display_name.split(',')[0],
+    lat: parseFloat(r.lat),
+    lon: parseFloat(r.lon),
+    name: r.display_name.split(',')[0],
+    country: parseCountry(r.address),
   };
 }
 
-async function runGeoSearch(lat, lon, label = 'your location') {
+async function detectCountry(lat, lon) {
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`,
+    { headers: { 'Accept': 'application/json' } },
+  );
+  if (!res.ok) return 'england';
+  const data = await res.json();
+  return parseCountry(data.address);
+}
+
+async function runGeoSearch(lat, lon, label = 'your location', country = 'england') {
   const nearest = findSunnyNear(lat, lon, label);
   if (!nearest.length) return;
   try {
     const weatherData = await fetchWeatherForAreas(nearest);
-    renderGeoResults(nearest, weatherData, label);
+    renderGeoResults(nearest, weatherData, label, country);
   } catch {
     geoMsg.textContent = geoMsg.textContent.replace(' — fetching weather…', '');
   }
@@ -525,7 +587,7 @@ async function handlePlaceSearch() {
       geoMsg.textContent = 'Place not found — try a different name or postcode.';
       return;
     }
-    await runGeoSearch(place.lat, place.lon, place.name);
+    await runGeoSearch(place.lat, place.lon, place.name, place.country);
   } catch {
     geoMsg.textContent = 'Could not search — check your connection.';
   }
@@ -547,7 +609,10 @@ geoLocateBtn.addEventListener('click', () => {
   geoMsg.textContent = 'Finding your location…';
   geoResults.innerHTML = '';
   navigator.geolocation.getCurrentPosition(
-    ({ coords: { latitude: lat, longitude: lon } }) => runGeoSearch(lat, lon),
+    async ({ coords: { latitude: lat, longitude: lon } }) => {
+      const country = await detectCountry(lat, lon).catch(() => 'england');
+      runGeoSearch(lat, lon, 'your location', country);
+    },
     (err) => {
       const msgs = { 1: 'Location access was denied.', 2: 'Location unavailable.', 3: 'Request timed out.' };
       geoMsg.textContent = msgs[err.code] || 'Could not determine your location.';
