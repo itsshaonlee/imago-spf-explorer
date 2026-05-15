@@ -41,8 +41,21 @@
           <div id="search-results" style="display:none"></div>
         </div>
 
-        <button id="geo-btn" class="sidebar-btn">&#9728; Find sunny near me</button>
-        <p id="geo-msg"></p>
+        <div id="geo-section">
+          <h3>Find me a sunny place</h3>
+          <div id="geo-input-row">
+            <input
+              id="geo-place-input"
+              type="text"
+              placeholder="Place or postcode…"
+              autocomplete="off"
+              spellcheck="false"
+            >
+            <button id="geo-place-btn" class="geo-go-btn" aria-label="Search">&#8594;</button>
+          </div>
+          <button id="geo-locate-btn" class="sidebar-btn">&#128205; Use my location</button>
+          <p id="geo-msg"></p>
+        </div>
 
         <div id="decile-section">
           <h3>Jump to decile</h3>

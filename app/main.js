@@ -34,7 +34,9 @@ const yearPrev      = document.getElementById('year-prev');
 const yearNext      = document.getElementById('year-next');
 const searchInput   = document.getElementById('search-input');
 const searchResults = document.getElementById('search-results');
-const geoBtn        = document.getElementById('geo-btn');
+const geoPlaceInput = document.getElementById('geo-place-input');
+const geoPlaceBtn   = document.getElementById('geo-place-btn');
+const geoLocateBtn  = document.getElementById('geo-locate-btn');
 const geoMsg        = document.getElementById('geo-msg');
 const decileGrid    = document.getElementById('decile-grid');
 const resetBtn      = document.getElementById('reset-btn');
@@ -381,7 +383,7 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#search-container')) searchResults.style.display = 'none';
 });
 
-// ── Geolocation ───────────────────────────────────────────────────────────────
+// ── Geo helpers ───────────────────────────────────────────────────────────────
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -392,38 +394,74 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-geoBtn.addEventListener('click', () => {
+function findSunnyNear(lat, lon, label = 'your location') {
+  const nearby = [];
+  for (const [code, area] of Object.entries(spfData.areas)) {
+    if (area.lat == null || area.lon == null) continue;
+    const yd = area[currentYear];
+    if (!yd || yd.decile !== 10) continue;
+    if (haversineKm(lat, lon, area.lat, area.lon) <= GEO_RADIUS_KM) nearby.push(code);
+  }
+
+  map.flyTo({ center: [lon, lat], zoom: 11, speed: 1.4 });
+
+  if (nearby.length) {
+    selectedCode = null;
+    activeDecile = 10;
+    map.setFilter('lsoa-selected', neverFilter());
+    map.setFilter('lsoa-peers', codesFilter(nearby));
+    map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.45);
+    updateChips(10);
+    geoMsg.textContent =
+      `${nearby.length} sunniest area${nearby.length !== 1 ? 's' : ''} within ${GEO_RADIUS_KM} km of ${label}`;
+  } else {
+    geoMsg.textContent = `No top-decile areas within ${GEO_RADIUS_KM} km of ${label}.`;
+  }
+}
+
+async function geocodePlace(query) {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=gb`;
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  if (!res.ok) throw new Error(`Geocoding failed (${res.status})`);
+  const results = await res.json();
+  if (!results.length) return null;
+  return {
+    lat: parseFloat(results[0].lat),
+    lon: parseFloat(results[0].lon),
+    name: results[0].display_name.split(',')[0],
+  };
+}
+
+async function handlePlaceSearch() {
+  const q = geoPlaceInput.value.trim();
+  if (!q) return;
+  geoMsg.textContent = 'Searching…';
+  try {
+    const place = await geocodePlace(q);
+    if (!place) {
+      geoMsg.textContent = 'Place not found — try a different name or postcode.';
+      return;
+    }
+    geoMsg.textContent = '';
+    findSunnyNear(place.lat, place.lon, place.name);
+  } catch {
+    geoMsg.textContent = 'Could not search — check your connection.';
+  }
+}
+
+geoPlaceBtn.addEventListener('click', handlePlaceSearch);
+geoPlaceInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handlePlaceSearch(); });
+
+geoLocateBtn.addEventListener('click', () => {
   if (!navigator.geolocation) {
     geoMsg.textContent = 'Geolocation is not supported by your browser.';
     return;
   }
   geoMsg.textContent = 'Finding your location…';
-
   navigator.geolocation.getCurrentPosition(
     ({ coords: { latitude: lat, longitude: lon } }) => {
       geoMsg.textContent = '';
-      map.flyTo({ center: [lon, lat], zoom: 11, speed: 1.4 });
-
-      const nearby = [];
-      for (const [code, area] of Object.entries(spfData.areas)) {
-        if (area.lat == null || area.lon == null) continue;
-        const yd = area[currentYear];
-        if (!yd || yd.decile !== 10) continue;
-        if (haversineKm(lat, lon, area.lat, area.lon) <= GEO_RADIUS_KM) nearby.push(code);
-      }
-
-      if (nearby.length) {
-        selectedCode = null;
-        activeDecile = 10;
-        map.setFilter('lsoa-selected', neverFilter());
-        map.setFilter('lsoa-peers', codesFilter(nearby));
-        map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.45);
-        updateChips(10);
-        geoMsg.textContent =
-          `${nearby.length} sunniest area${nearby.length !== 1 ? 's' : ''} within ${GEO_RADIUS_KM} km`;
-      } else {
-        geoMsg.textContent = `No top-decile areas within ${GEO_RADIUS_KM} km of your location.`;
-      }
+      findSunnyNear(lat, lon);
     },
     (err) => {
       const msgs = { 1: 'Location access was denied.', 2: 'Location unavailable.', 3: 'Request timed out.' };

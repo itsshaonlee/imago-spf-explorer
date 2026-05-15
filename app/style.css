@@ -254,10 +254,58 @@ body {
 
 .sidebar-btn:hover { opacity: 0.82; }
 
-#geo-btn { background: var(--teal); color: #0e0e1a; }
 #reset-btn { background: rgba(255,255,255,0.07); color: var(--light-grey); margin-top: auto; }
 
-#geo-msg { font-size: 0.78rem; color: var(--grey); min-height: 1rem; line-height: 1.4; }
+/* ── Geo section ────────────────────────────────────────── */
+
+#geo-section h3 {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--grey);
+  margin-bottom: 0.55rem;
+}
+
+#geo-input-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+#geo-place-input {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 6px;
+  color: var(--light-grey);
+  font-family: 'Figtree', sans-serif;
+  font-size: 0.88rem;
+  padding: 0.58rem 0.75rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+#geo-place-input:focus { border-color: var(--teal); }
+#geo-place-input::placeholder { color: var(--grey); }
+
+.geo-go-btn {
+  background: var(--teal);
+  border: none;
+  border-radius: 6px;
+  color: #0e0e1a;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 0 0.8rem;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.geo-go-btn:hover { opacity: 0.82; }
+
+#geo-locate-btn { background: rgba(255,255,255,0.07); color: var(--light-grey); }
+
+#geo-msg { font-size: 0.78rem; color: var(--grey); min-height: 1rem; line-height: 1.4; margin-top: 0.4rem; }
 
 /* ── Decile section ─────────────────────────────────────── */
 
