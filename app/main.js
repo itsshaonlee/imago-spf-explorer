@@ -7,11 +7,16 @@ const UK_ZOOM       = 5;
 const GEO_RADIUS_KM = 10;
 
 const DECILE_COLORS = {
-  1:  '#24226F',
-  2:  '#1877CF', 3:  '#1877CF',
-  4:  '#03CEA3', 5:  '#03CEA3', 6: '#03CEA3',
-  7:  '#8EC840', 8:  '#8EC840',
-  9:  '#FF8F42', 10: '#FF8F42',
+  1:  '#0d47a1',
+  2:  '#1565c0',
+  3:  '#1976d2',
+  4:  '#1e88e5',
+  5:  '#2196f3',
+  6:  '#42a5f5',
+  7:  '#64b5f6',
+  8:  '#90caf9',
+  9:  '#bbdefb',
+  10: '#e3f2fd',
 };
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -304,7 +309,7 @@ function buildDecileChips() {
     btn.dataset.decile = d;
     btn.textContent = d;
     btn.style.background = DECILE_COLORS[d];
-    btn.style.color = d <= 2 ? '#d0d0e8' : '#0e0e1a';
+    btn.style.color = d <= 6 ? '#ffffff' : '#0e0e1a';
     btn.title = d === 1 ? 'Most cloud' : d === 10 ? 'Most sun' : `Decile ${d}`;
     btn.addEventListener('click', () => highlightDecile(d));
     decileGrid.appendChild(btn);
