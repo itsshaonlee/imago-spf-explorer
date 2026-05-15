@@ -466,6 +466,29 @@ async function fetchWeatherForAreas(areas) {
   );
 }
 
+const SUNNY_QUIPS = {
+  england: [
+    'Look outside! Actual sunshine.',
+    'Blimey, it\'s sunny. Get out there.',
+    'Quick — before it changes.',
+    'Rare sighting: sun over England. Go.',
+  ],
+  scotland: [
+    'Look oot the windae!',
+    'Aye, it\'s sunny. Dinnae waste it.',
+    'Och, would ye look at that. Blue sky.',
+  ],
+  wales: [
+    'Sunshine in Wales! Get outside.',
+    'Even the valleys are bright today.',
+    'Go on. Out you go.',
+  ],
+  northern_ireland: [
+    'Catch yourself on — it\'s gorgeous out there.',
+    'Wise up and get outside. It\'s sunny!',
+  ],
+};
+
 const CLOUDY_QUIPS = {
   england: [
     'Not a patch of blue sky in sight. Quintessentially English.',
@@ -489,12 +512,6 @@ const CLOUDY_QUIPS = {
     'Grand soft day, as they say.',
     'Overcast from Belfast to the Glens. As expected.',
     'Classic Northern Ireland. Wouldn\'t have it any other way.',
-  ],
-  ireland: [
-    'Grand soft day, isn\'t it.',
-    'Sure, what do you expect? It\'s Ireland.',
-    'Not a sunbeam to be had. Ah well.',
-    'Overcast all round. Sure, it\'ll clear up later.',
   ],
 };
 
@@ -520,8 +537,12 @@ function renderGeoResults(nearest, weatherData, label, country = 'england') {
   }).join('');
 
   const hasData = weatherData.filter(Boolean);
+  const allSunny  = hasData.length > 0 && hasData.every(w => w.is_day && w.cloud_cover <= 30);
   const allCloudy = hasData.length > 0 && hasData.every(w => w.is_day && w.cloud_cover >= 75);
-  if (allCloudy) {
+  if (allSunny) {
+    const pool = SUNNY_QUIPS[country] || SUNNY_QUIPS.england;
+    infoGeoSub.textContent = pool[Math.floor(Math.random() * pool.length)];
+  } else if (allCloudy) {
     const pool = CLOUDY_QUIPS[country] || CLOUDY_QUIPS.england;
     infoGeoSub.textContent = pool[Math.floor(Math.random() * pool.length)];
   } else {
@@ -533,7 +554,6 @@ function renderGeoResults(nearest, weatherData, label, country = 'england') {
 }
 
 function parseCountry(addr = {}) {
-  if (addr.country_code === 'ie') return 'ireland';
   const state = (addr.state || '').toLowerCase();
   if (state.includes('scotland'))         return 'scotland';
   if (state.includes('wales') || state.includes('cymru')) return 'wales';
@@ -542,7 +562,7 @@ function parseCountry(addr = {}) {
 }
 
 async function geocodePlace(query) {
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=gb,ie&addressdetails=1`;
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=gb&addressdetails=1`;
   const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
   if (!res.ok) throw new Error(`Geocoding failed (${res.status})`);
   const results = await res.json();
