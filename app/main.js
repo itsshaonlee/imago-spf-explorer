@@ -71,12 +71,10 @@ const map = new maplibregl.Map({
       carto: {
         type: 'raster',
         tiles: [
-          'https://a.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}.png',
-          'https://b.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}.png',
-          'https://c.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}.png',
+          'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png',
         ],
         tileSize: 256,
-        attribution: '© <a href="https://carto.com/">CARTO</a>',
+        attribution: '© <a href="https://stadiamaps.com/">Stadia Maps</a> © <a href="https://openmaptiles.org/">OpenMapTiles</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       },
     },
     layers: [{ id: 'carto-base', type: 'raster', source: 'carto' }],
@@ -88,7 +86,7 @@ const map = new maplibregl.Map({
 
 map.addControl(
   new maplibregl.AttributionControl({
-    customAttribution: '© Carto Dark Matter · ONS Open Geography · Imago UKRI',
+    customAttribution: '© Stadia Maps · ONS Open Geography · Imago UKRI',
   }),
   'bottom-right',
 );
