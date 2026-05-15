@@ -4,10 +4,10 @@
 
 | | |
 |---|---|
-| Version | 0.2 — updated after GeoPackage inspection |
-| Status | Pre-build · for handoff to Claude Code |
-| Data | SPF GeoPackages 2023–2025 (Imago) · layer: SPF_LSOA_level |
-| Hosting | GitHub Pages (personal repo → transfer to Imago-SDRUK) |
+| Version | 0.3 — updated to reflect built implementation |
+| Status | Live on GitHub Pages |
+| Data | SPF GeoPackages 2023–2025 (Imago) · layer names vary by year (see §3.2) |
+| Hosting | GitHub Pages (`itsshaonlee/imago-spf-explorer` → transfer to Imago-SDRUK) |
 | Last updated | May 2026 |
 
 ---
@@ -26,32 +26,32 @@ A secondary entry point — **Find sunny near me** — uses browser geolocation 
 
 ### 2.1 Browse and click
 
-- On load: map centred on UK, all small areas visible as a choropleth (SPF value → colour ramp)
+- On load: map centred on UK, all small areas visible as a choropleth (SPF decile → colour)
 - Click any area: right panel populates, map highlights all peers in the same national decile
 - Clicking a different area replaces selection; clicking the same area deselects
 - Reset button returns to overview, clears selection and highlights
 
 ### 2.2 Search
 
-- Sidebar text input accepts `data_zone_code` (e.g. `E01004190`) or area name (from ONS names lookup — see §3.5)
-- Dropdown results; selecting one flies the map to that area and triggers click behaviour
+- Sidebar text input accepts `data_zone_code` (e.g. `E01004190`) or area name
+- Dropdown results (max 8); selecting one flies the map to that area and triggers click behaviour
 
 ### 2.3 Find sunny near me
 
 - Button triggers browser Geolocation API
-- On success: map flies to user location, highlights top-decile areas within 10 km
+- On success: map flies to user location, highlights top-decile (decile 10) areas within 10 km
 - On denial/error: polite inline message, does not block other functionality
 
 ### 2.4 Year selector
 
-- Chevron buttons in topbar step through available years (2023, 2024, 2025 initially)
-- Changing year reloads SPF values and redraws choropleth; clears selection
+- Chevron buttons in topbar step through available years (2023, 2024, 2025)
+- Changing year updates choropleth via `setFeatureState` (no tile reload, instant)
 - Available years read from `spf-data.json` at load time — adding a new year requires no app code changes
 
 ### 2.5 Shareable URLs
 
 - URL updates on every meaningful state change using the History API (no page reload)
-- Parameters: `?area=E01004190&year=2023` — sufficient to restore full view on load
+- Parameters: `?area=E01004190`, `?year=2023`, `?decile=5` — sufficient to restore full view
 - Sharing a URL opens the map zoomed to that area, year, and decile highlight
 
 ### 2.6 Jump to decile
@@ -65,21 +65,20 @@ A secondary entry point — **Find sunny near me** — uses browser geolocation 
 
 ### 3.1 Source GeoPackages
 
-One GeoPackage per year. All have the same schema (confirmed by inspection):
+One GeoPackage per year, stored in `data/raw/` (gitignored):
 
 ```
-data/raw/spf_2023.gpkg
-data/raw/spf_2024.gpkg
-data/raw/spf_2025.gpkg
+data/raw/SPF_LSOA_2023.gpkg
+data/raw/SPF_LSOA_2024.gpkg
+data/raw/SPF_LSOA_2025.gpkg
 ```
 
-> **Adding a new year:** Drop the new GeoPackage into `data/raw/` and trigger the pipeline (§6). No app code changes needed — the year is inferred from the filename.
+> **Adding a new year:** Drop the new GeoPackage into `data/raw/` and re-run the pipeline (§6). No app code changes needed — the year is inferred from the filename.
 
-### 3.2 GeoPackage schema (confirmed)
+### 3.2 GeoPackage schema
 
 | | |
 |---|---|
-| Layer name | `SPF_LSOA_level` |
 | Area code column | `data_zone_code` (string) |
 | SPF value column | `cloudprob_corrected_mean` (float64) |
 | Geometry type | MultiPolygon |
@@ -87,7 +86,12 @@ data/raw/spf_2025.gpkg
 | Feature count | 46,844 (all UK small areas) |
 | Value range | 0–100 (cloud probability, annual mean — higher = more cloud) |
 
-> ⚠️ **CRS — action required:** The GeoPackage is in EPSG:27700 (British National Grid). MapLibre and tippecanoe require EPSG:4326 (WGS84). The pipeline must reproject before tile generation. See §5.4.
+> ⚠️ **Layer names differ by year.** Unlike the original spec, the layer name is not consistent:
+> - 2023: `SPF_LSOA_2023`
+> - 2024: `SPF_LSOA_level`
+> - 2025: `SPF_LSOA_2025`
+>
+> `extract.py` does **not** pass a `layer=` argument to `gpd.read_file()` — geopandas reads the first layer automatically. Do not add `layer=` unless confirmed for a new file.
 
 ### 3.3 SPF value
 
@@ -100,27 +104,29 @@ data/raw/spf_2025.gpkg
 
 ### 3.4 Deciles
 
-Computed nationally across all 46,844 UK small areas, per year independently. Decile 1 = highest cloud (least sun). Decile 10 = lowest cloud (most sun). Computed using `pd.qcut` with 10 equal-frequency bins.
+Computed nationally across all 46,844 UK small areas, per year independently. Decile 1 = highest cloud (least sun). Decile 10 = lowest cloud (most sun). Computed using `pd.qcut(q=10, labels=range(10,0,-1))`.
 
 > **Rationale:** National deciles are simpler to communicate than regional. A user seeing "decile 3" understands they are in the cloudier third of the UK.
 
-### 3.5 Area names lookup
+### 3.5 Area names and centroids
 
-The GeoPackage contains only `data_zone_code` — no human-readable name. A separate names CSV must be joined at build time to populate the info panel and search.
+Area names and centroids are sourced from a separate GeoPackage `UK_LSOA_DZ.gpkg` (gitignored, stored in `data/raw/`). `deciles.py` reads this file and extracts nation-specific name columns:
 
-- **England/Wales LSOAs:** LSOA names from ONS (`LSOA11CD` → `LSOA11NM`)
-- **Scotland Data Zones:** Data Zone names from Scottish Government open data
-- **NI Super Output Areas:** SOA names from NISRA
+- **England/Wales LSOAs:** `LSOA21NM`
+- **Scotland Data Zones:** `DataZone` (or equivalent — check column names on the file)
+- **NI Super Output Areas:** `SOA_LABEL` (or equivalent)
 
-The pipeline merges these into a single names lookup keyed by `data_zone_code` before building `spf-data.json`.
+Centroids are computed in projected CRS (EPSG:27700) then reprojected:
 
+```python
+gdf.geometry.centroid.to_crs("EPSG:4326")
 ```
-data/reference/area_names.csv   # columns: data_zone_code, area_name — committed to repo
-```
+
+The resulting `lat` and `lon` are stored in `spf-data.json` for the map's `flyTo` and geolocation features.
 
 ### 3.6 spf-data.json schema
 
-Output of the build pipeline. Loaded once on startup, held in memory. Estimated size: ~8–12 MB for 46,844 areas × 3 years.
+Output of the build pipeline. Committed to `data/processed/spf-data.json`. Loaded once on startup, held in memory (~6–8 MB for 46,844 areas × 3 years).
 
 ```json
 {
@@ -133,6 +139,8 @@ Output of the build pipeline. Loaded once on startup, held in memory. Estimated 
   "areas": {
     "E01000001": {
       "name": "City of London 001A",
+      "lat": 51.514,
+      "lon": -0.092,
       "2023": { "value": 57.54, "decile": 3 },
       "2024": { "value": 55.12, "decile": 4 },
       "2025": { "value": 56.80, "decile": 3 }
@@ -149,38 +157,41 @@ Output of the build pipeline. Loaded once on startup, held in memory. Estimated 
 
 Tiles (geometry) and data (SPF values) are kept strictly separate. Tiles are built once — boundaries do not change year to year. Only `spf-data.json` changes when a new year ships.
 
-### 4.2 Vector tiles
+### 4.2 Vector tiles — PMTiles
 
 | | |
 |---|---|
-| Tool | tippecanoe |
-| Input | `boundaries.geojson` (reprojected from GeoPackage — see §5.4) |
-| Output | `tiles/{z}/{x}/{y}.pbf` — static tile pyramid committed to repo |
+| Format | **PMTiles v3** — single file, HTTP range requests |
+| Tool | GDAL MVT driver (`ogr2ogr -f MVT`) on Windows via OSGeo4W |
+| Intermediate | `tiles/` directory (z5–z14 .pbf pyramid, 171k files, gitignored) |
+| Final output | `tiles/lsoa.pmtiles` — **committed to repo** (95 MiB, brotli-compressed) |
 | Zoom range | z5 (UK overview) to z14 (LSOA detail) |
-| tippecanoe flags | `--drop-densest-as-needed -z14 -Z5 --no-tile-compression` |
-| Hosting | GitHub Pages — no tile server needed |
+| Compression | Brotli quality=9 applied per tile in `build_pmtiles.py` |
+| Hosting | GitHub Pages — served via HTTP range requests |
 | Update frequency | One-time. Rebuild only if ONS releases new boundaries. |
 
-> **Tile size:** Test the tippecanoe output size before committing. UK LSOAs at z5–z14 may produce a large directory. If >500 MB, reduce max zoom to 13 or increase simplification.
+> **Why PMTiles?** The original spec used a .pbf directory (171k files = 171k HTTP requests on first load). PMTiles consolidates this into 2–5 range requests per viewport, matching the load-time smoothness of the reference `embeddings-uk-explorer`.
+
+> **GitHub file size:** 95 MiB (95.35 MiB) is under GitHub's 100 MiB hard limit. GitHub warns at 50 MiB — the warning is cosmetic and does not affect serving.
 
 ### 4.3 Browser client
 
 | | |
 |---|---|
-| Map library | MapLibre GL JS |
-| Basemap | Carto Dark Matter no-labels: `https://{s}.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}{r}.png` |
-| Attribution | `© Carto Dark Matter · ONS Open Geography · Imago UKRI` — required in map corner |
-| Tile source | `tiles/{z}/{x}/{y}.pbf` via MapLibre `addSource` |
-| Data join | JS `Map` built at startup: `data_zone_code → { name, year → { value, decile } }` |
-| Click handler | Reads clicked feature's `data_zone_code` → decile lookup → MapLibre filter for peers |
-| Geolocation | Browser Geolocation API → `flyTo` → spatial filter for nearby top-decile areas |
-| URL state | History API `pushState` on click/year change; parsed on load to restore state |
-| Font | Figtree via Google Fonts (`preconnect` in `<head>`) |
-| Default view | UK centred: `centre [-3.0, 55.0]`, zoom 5 |
+| Map library | MapLibre GL JS v4 |
+| Basemap | Carto Dark Matter no-labels (`dark_matter_nolabels/{z}/{x}/{y}.png`) — no `@2x` suffix |
+| Attribution | `© Carto Dark Matter · ONS Open Geography · Imago UKRI` |
+| Tile source | `pmtiles://` protocol — MapLibre fetches byte ranges from `lsoa.pmtiles` |
+| Choropleth | `setFeatureState` per area → `['coalesce', ['feature-state', 'color'], '#44445a']` in paint |
+| `promoteId` | `{ 'lsoa': 'data_zone_code' }` — uses the area code as MapLibre feature ID |
+| Data join | JS object built at startup: `code → { name, lat, lon, year → { value, decile } }` |
+| Click handler | Reads `data_zone_code` from clicked feature → decile lookup → filter for peer outlines |
+| Geolocation | Browser Geolocation API → `flyTo` → haversine filter for nearby top-decile areas |
+| URL state | History API `replaceState` on click/year change; parsed on load to restore state |
+| Font | Figtree via Google Fonts |
+| Default view | UK centred: `[-3.0, 55.0]`, zoom 5 |
 
 ### 4.4 Colour ramp
-
-Running through the SDR-UK brand palette. Low `cloudprob_corrected_mean` = more sun = warm. High = more cloud = cool.
 
 | Decile | Colour |
 |---|---|
@@ -194,7 +205,7 @@ Running through the SDR-UK brand palette. Low `cloudprob_corrected_mean` = more 
 |---|---|
 | Selected area | White `#FFFFFF` outline, 2px, full opacity |
 | Peer areas (same decile) | Teal `#03CEA3` outline, 1.5px, opacity 0.9 |
-| Non-peer areas | No highlight, opacity 0.65 |
+| Non-peer / background | fill-opacity 0.45 when any selection is active; 0.75 otherwise |
 
 ---
 
@@ -203,96 +214,141 @@ Running through the SDR-UK brand palette. Low `cloudprob_corrected_mean` = more 
 ### 5.1 Directory structure
 
 ```
-spf-explorer/
+imago-spf-explorer/
   data/
-    raw/                  # .gpkg files — gitignored (1.7 GB each)
-    reference/
-      area_names.csv      # data_zone_code, area_name — committed
+    raw/                        # gitignored — store locally
+      SPF_LSOA_2023.gpkg
+      SPF_LSOA_2024.gpkg
+      SPF_LSOA_2025.gpkg
+      UK_LSOA_DZ.gpkg           # area names + geometry (all nations)
     processed/
-      spf-data.json       # built output — committed
-  tiles/                  # .pbf tile pyramid — committed (one-time build)
+      spf-data.json             # committed — pipeline output
+      spf_all_years.csv         # gitignored — intermediate
+  tiles/                        # directory tree gitignored
+    lsoa.pmtiles                # committed — 95 MiB, brotli
   pipeline/
-    extract.py            # GeoPackages → tidy CSV
-    deciles.py            # assign deciles, merge names, build JSON
-    build_tiles.sh        # one-time: ogr2ogr reproject + tippecanoe + mb-util
-    requirements.txt      # geopandas, pandas, numpy, pyogrio
+    extract.py                  # GeoPackages → tidy CSV
+    deciles.py                  # assign deciles, merge names, build JSON
+    build_tiles.ps1             # one-time: GDAL MVT tile pyramid (Windows)
+    build_pmtiles.py            # one-time: tiles/ → lsoa.pmtiles
+    requirements.txt            # geopandas, pandas, numpy, pyogrio, pmtiles, brotli
   app/
     index.html
     main.js
     style.css
+  assets/
+    Imago-logo.png
   .github/workflows/
-    update-data.yml
-  README.md
+    deploy.yml                  # deploy-only — no CI data pipeline
+  index.html                    # root redirect to app/
 ```
 
 ### 5.2 extract.py
 
-Loops over all `.gpkg` files in `data/raw/`. For each:
+Loops over all `.gpkg` files in `data/raw/` matching `SPF_LSOA_*.gpkg`. For each:
 
-- Opens with geopandas (`layer='SPF_LSOA_level'`)
+- Opens with geopandas — **no `layer=` argument** (layer names differ per year)
 - Reads `data_zone_code` and `cloudprob_corrected_mean`
-- Infers year from filename pattern `spf_YYYY.gpkg`
-- Drops geometry (not needed at this stage)
+- Infers year from filename pattern `SPF_LSOA_YYYY.gpkg`
+- Drops geometry
 - Appends to a tidy long-format dataframe
 
-Output: `data/processed/spf_all_years.csv` with columns: `data_zone_code, year, cloudprob_corrected_mean`
+Output: `data/processed/spf_all_years.csv` — columns: `data_zone_code, year, cloudprob_corrected_mean`
 
 ### 5.3 deciles.py
 
 - Reads `spf_all_years.csv`
-- Reads `data/reference/area_names.csv` and joins on `data_zone_code`
-- For each year: ranks all 46,844 areas by `cloudprob_corrected_mean`, assigns decile 1–10 using `pd.qcut(q=10, labels=False) + 1`
+- Reads `data/raw/UK_LSOA_DZ.gpkg` for area names and centroids (no `layer=` arg)
+- Computes centroids in EPSG:27700, reprojects to EPSG:4326 for `lat`/`lon`
+- Extracts nation-appropriate name column per area
+- For each year: assigns decile 1–10 using `pd.qcut(q=10, labels=range(10,0,-1))`
 - Builds nested JSON (see §3.6 schema)
 - Writes `data/processed/spf-data.json`
 
-### 5.4 build_tiles.sh (one-time only)
+### 5.4 build_tiles.ps1 (one-time, Windows)
 
-Run once to generate the tile pyramid. Not part of the annual update cycle.
+Run once to generate the intermediate .pbf tile pyramid in `tiles/`. Requires OSGeo4W.
 
-> ⚠️ **Reproject required:** GeoPackage is EPSG:27700. Must convert to EPSG:4326 before tippecanoe.
+> ⚠️ **PROJ/GDAL version conflict:** OSGeo4W ships an older `proj.db`. Override with the conda environment's newer databases before running:
 
-```bash
-# Step 1: reproject from BNG to WGS84
-ogr2ogr -f GeoJSON \
-  -t_srs EPSG:4326 \
-  data/processed/boundaries.geojson \
-  data/raw/spf_2023.gpkg \
-  SPF_LSOA_level
+```powershell
+$env:PROJ_DATA = "C:\Users\spspa\anaconda3\envs\raster_env\Library\share\proj"
+$env:GDAL_DATA = "C:\Users\spspa\anaconda3\envs\raster_env\Library\share\gdal"
 
-# Step 2: build tiles
-tippecanoe \
-  -o data/processed/tiles.mbtiles \
-  -z14 -Z5 \
-  --drop-densest-as-needed \
-  --no-tile-compression \
-  --include=data_zone_code \
-  --layer=lsoa \
-  data/processed/boundaries.geojson
-
-# Step 3: explode to directory structure for GitHub Pages
-mb-util data/processed/tiles.mbtiles tiles --image-format=pbf
+& "C:\OSGeo4W\bin\ogr2ogr.exe" `
+  -f MVT tiles `
+  data\SPF_LSOA_2023.gpkg `
+  -t_srs EPSG:4326 `
+  -select data_zone_code `
+  -nln lsoa `
+  -dsco MINZOOM=5 `
+  -dsco MAXZOOM=14 `
+  -dsco COMPRESS=NO `
+  -dsco MAX_SIZE=500000
 ```
 
-> **`--no-tile-compression`:** Required for GitHub Pages static serving. MapLibre expects uncompressed `.pbf` when served without a tile server handling `Content-Encoding`.
+Result: 171k `.pbf` files in `tiles/` (~142 MB uncompressed). These are **not committed** — they serve as input to `build_pmtiles.py`.
 
-> **`--include=data_zone_code`:** Each tile feature carries only the area code. SPF values come from the JS lookup, not the tile. Keeps tile size small.
+### 5.5 build_pmtiles.py (one-time)
 
-### 5.5 GitHub Actions — update-data.yml
+Converts the `tiles/` directory into a single `tiles/lsoa.pmtiles` file:
 
-Triggered on push when any file matching `data/raw/*.gpkg` is added or modified. Steps:
+- Scans all `.pbf` files, converts `(z, x, y)` to PMTiles tile ID (Hilbert curve ordering)
+- Sorts by tile ID for clustered, spatially coherent range requests
+- Brotli-compresses each tile at quality=9 before writing
+- Calls `Writer.finalize()` with tile type MVT and compression BROTLI
+
+Run with the `raster_env` conda environment:
+
+```powershell
+C:\Users\spspa\anaconda3\envs\raster_env\python.exe pipeline\build_pmtiles.py
+```
+
+Output: `tiles/lsoa.pmtiles` — **committed to repo**.
+
+### 5.6 GitHub Actions — deploy.yml
+
+**Deploy-only** workflow. The data pipeline (extract.py, deciles.py) runs locally; only outputs are committed. Steps:
 
 1. Checkout repo
-2. Set up Python with geopandas, pandas, pyogrio
-3. Run `pipeline/extract.py`
-4. Run `pipeline/deciles.py`
-5. Commit updated `data/processed/spf-data.json` with message `chore: update SPF data [skip ci]`
-6. Deploy `app/` and `tiles/` to GitHub Pages via `actions/deploy-pages`
+2. Upload entire repo root as GitHub Pages artifact (so `../tiles/lsoa.pmtiles` resolves from `app/`)
+3. Deploy to GitHub Pages
 
-> **Raw GeoPackages:** `.gpkg` files are gitignored (1.7 GB each). Decide on storage before first push: Git LFS (simplest) or store externally and pull in CI via a download step.
+> **No CI data pipeline.** GeoPackages are too large (multi-GB) for CI. Run the pipeline locally, commit `spf-data.json`, and push.
 
 ---
 
-## 6. Mobile layout
+## 6. Running the pipeline (local)
+
+Full rebuild from scratch (new year or boundary update):
+
+```powershell
+# 1. Activate environment
+conda activate raster_env
+
+# 2. Extract values from all GeoPackages
+python pipeline\extract.py
+
+# 3. Assign deciles, build JSON
+python pipeline\deciles.py
+
+# 4. (Boundaries only — skip if already built) Build tile pyramid
+.\pipeline\build_tiles.ps1
+
+# 5. (Boundaries only) Convert to PMTiles
+python pipeline\build_pmtiles.py
+
+# 6. Commit outputs
+git add data/processed/spf-data.json tiles/lsoa.pmtiles
+git commit -m "update SPF data YYYY"
+git push
+```
+
+New-year-only update (no boundary change): steps 2, 3, 6 only.
+
+---
+
+## 7. Mobile layout
 
 The three-panel desktop layout collapses at viewports below 768px into a full-screen map with overlaid panels:
 
@@ -302,36 +358,38 @@ The three-panel desktop layout collapses at viewports below 768px into a full-sc
 - **Zoom controls** and **Reset** → remain as floating map buttons
 - URL sharing works identically on mobile
 
-> **Implementation:** Single `max-width: 768px` media query. MapLibre handles touch and pinch-zoom natively — no extra config needed.
+> **Implementation:** Single `max-width: 768px` media query. MapLibre handles touch and pinch-zoom natively.
 
 ---
 
-## 7. Brand and design tokens
+## 8. Brand and design tokens
 
 | Token | Value |
 |---|---|
 | Font | Figtree (Google Fonts) — Bold for headings/labels, Regular for body |
 | Navy | `#24226F` — topbar, headings, decile 1 fill |
 | Teal | `#03CEA3` — highlights, active states, decile 5 fill |
-| Blue | `#1877CF` — links, ONS button, decile 3 fill |
+| Blue | `#1877CF` — links, decile 3 fill |
 | Orange | `#FF8F42` — decile 10 fill, logo accent |
 | Grey | `#8C91A8` — secondary text, muted labels |
 | Light grey | `#E2E5F3` — subtle backgrounds |
-| Imago accent | `#4A4A49` — Imago service colour, neutral dark |
-| Basemap | Carto Dark Matter no-labels |
+| Imago accent | `#4A4A49` — neutral dark |
+| Basemap | Carto Dark Matter no-labels — use `{z}/{x}/{y}.png` (no `@2x` suffix) |
 | Attribution | `© Carto Dark Matter · ONS Open Geography · Imago UKRI` |
 
 ---
 
-## 8. Open questions
+## 9. Resolved decisions
 
-Confirm these before or at the start of the build:
-
-| Question | Notes |
+| Question | Decision |
 |---|---|
-| GeoPackage storage | Git LFS or external download in CI? Must decide before first push — hard to change later. |
-| `area_names.csv` source | Confirm download URLs for ONS LSOA names (England/Wales), Scottish Government Data Zone names, and NISRA SOA names. |
-| Tile directory size | Test tippecanoe output before committing `tiles/`. If >500 MB consider reducing `z-max` to 13. |
-| Find sunny radius | 10 km default — confirm this is appropriate. |
-| ONS profile URL pattern | Confirm the ONS area profile URL structure for the info panel external link. |
-| Default year on load | Most recent (2025) or earliest (2023)? |
+| GeoPackage storage | Local only — gitignored. Too large for LFS. Pipeline runs locally. |
+| Area names source | `UK_LSOA_DZ.gpkg` — single file covering all three nations. |
+| Tile format | PMTiles (single file, range requests) — not a .pbf directory. |
+| Tile toolchain | GDAL MVT driver (`ogr2ogr -f MVT`) on Windows — no tippecanoe/WSL needed. |
+| Tile compression | Brotli quality=9 in `build_pmtiles.py` — tiles within PMTiles file compressed individually. |
+| Choropleth method | `setFeatureState` + `promoteId` — not a match expression. Year change is instant. |
+| Find sunny radius | 10 km — confirmed. |
+| ONS profile links | Removed — added little value, URL patterns differ by nation. |
+| Default year on load | 2025 (most recent). |
+| GitHub file size | `lsoa.pmtiles` is 95.35 MiB — under the 100 MiB hard limit. Warning at 50 MiB is cosmetic. |
