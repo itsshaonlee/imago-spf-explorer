@@ -53,9 +53,9 @@ const map = new maplibregl.Map({
       carto: {
         type: 'raster',
         tiles: [
-          'https://a.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}@2x.png',
-          'https://b.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}@2x.png',
-          'https://c.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}@2x.png',
+          'https://a.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}.png',
+          'https://b.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}.png',
+          'https://c.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}.png',
         ],
         tileSize: 256,
         attribution: '© <a href="https://carto.com/">CARTO</a>',
@@ -121,10 +121,20 @@ function codesFilter(codes) {
 
 // ── Layer setup ───────────────────────────────────────────────────────────────
 
+function resolveTileUrl() {
+  // Build absolute URL without new URL() which would percent-encode {z}/{x}/{y}
+  const parts = window.location.href.replace(/\/[^/]*$/, '').split('/');
+  for (const seg of TILES_PATH.split('/')) {
+    if (seg === '..') parts.pop();
+    else if (seg) parts.push(seg);
+  }
+  return parts.join('/');
+}
+
 function setupLayers() {
   map.addSource('lsoa', {
     type: 'vector',
-    tiles: [window.location.origin + new URL(TILES_PATH, window.location.href).pathname],
+    tiles: [resolveTileUrl()],
     minzoom: 5,
     maxzoom: 14,
   });
