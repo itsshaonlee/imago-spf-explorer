@@ -307,7 +307,13 @@ body {
 
 #geo-msg { font-size: 0.78rem; color: var(--grey); min-height: 1rem; line-height: 1.4; margin-top: 0.4rem; }
 
-#geo-results { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.5rem; }
+#info-area.hidden, #info-geo.hidden { display: none; }
+
+#info-geo-title { font-size: 1rem; font-weight: 700; line-height: 1.35; padding-right: 1.5rem; }
+
+#info-geo-sub { margin-top: 0.2rem; }
+
+#geo-results { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.75rem; }
 
 .geo-result-item {
   display: flex;

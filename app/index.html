@@ -55,7 +55,6 @@
           </div>
           <button id="geo-locate-btn" class="sidebar-btn">&#128205; Use my location</button>
           <p id="geo-msg"></p>
-          <div id="geo-results"></div>
         </div>
 
         <div id="decile-section">
@@ -82,17 +81,28 @@
 
       <div id="info-panel" class="hidden">
         <button id="info-close" aria-label="Close">&times;</button>
-        <h2 id="info-name"></h2>
-        <p id="info-code" class="info-code"></p>
-        <div class="info-stat">
-          <span class="info-stat-label">Cloud probability</span>
-          <span id="info-value" class="info-stat-value"></span>
+
+        <!-- Mode: single area detail -->
+        <div id="info-area">
+          <h2 id="info-name"></h2>
+          <p id="info-code" class="info-code"></p>
+          <div class="info-stat">
+            <span class="info-stat-label">Cloud probability</span>
+            <span id="info-value" class="info-stat-value"></span>
+          </div>
+          <div class="info-stat">
+            <span class="info-stat-label">National decile</span>
+            <span id="info-decile" class="info-stat-value"></span>
+          </div>
+          <p class="info-peers-note" id="info-peers-note"></p>
         </div>
-        <div class="info-stat">
-          <span class="info-stat-label">National decile</span>
-          <span id="info-decile" class="info-stat-value"></span>
+
+        <!-- Mode: geo search results list -->
+        <div id="info-geo" class="hidden">
+          <h2 id="info-geo-title"></h2>
+          <p id="info-geo-sub" class="info-code"></p>
+          <div id="geo-results"></div>
         </div>
-        <p class="info-peers-note" id="info-peers-note"></p>
       </div>
 
     </div>

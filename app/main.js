@@ -38,16 +38,20 @@ const geoPlaceInput = document.getElementById('geo-place-input');
 const geoPlaceBtn   = document.getElementById('geo-place-btn');
 const geoLocateBtn  = document.getElementById('geo-locate-btn');
 const geoMsg        = document.getElementById('geo-msg');
-const geoResults    = document.getElementById('geo-results');
+const geoResults    = document.getElementById('geo-results'); // lives in info-geo (right panel)
 const decileGrid    = document.getElementById('decile-grid');
 const resetBtn      = document.getElementById('reset-btn');
 const infoPanel     = document.getElementById('info-panel');
+const infoArea      = document.getElementById('info-area');
+const infoGeo       = document.getElementById('info-geo');
 const infoName      = document.getElementById('info-name');
 const infoCodeEl    = document.getElementById('info-code');
 const infoValue     = document.getElementById('info-value');
 const infoDecileEl  = document.getElementById('info-decile');
 const infoPeersNote = document.getElementById('info-peers-note');
 const infoClose     = document.getElementById('info-close');
+const infoGeoTitle  = document.getElementById('info-geo-title');
+const infoGeoSub    = document.getElementById('info-geo-sub');
 const sidebar       = document.getElementById('sidebar');
 const sidebarHandle = document.getElementById('sidebar-handle');
 
@@ -251,6 +255,14 @@ yearNext.addEventListener('click', () => {
   if (i < years.length - 1) applyYear(years[i + 1]);
 });
 
+// ── Info panel mode ───────────────────────────────────────────────────────────
+
+function showInfoPanel(mode) {
+  infoArea.classList.toggle('hidden', mode !== 'area');
+  infoGeo.classList.toggle('hidden', mode !== 'geo');
+  infoPanel.classList.remove('hidden');
+}
+
 // ── Selection ─────────────────────────────────────────────────────────────────
 
 function selectArea(code, fly = false) {
@@ -279,7 +291,7 @@ function selectArea(code, fly = false) {
   infoPeersNote.textContent = decile
     ? `${count.toLocaleString()} areas share decile ${decile} nationally`
     : '';
-  infoPanel.classList.remove('hidden');
+  showInfoPanel('area');
 
   if (fly && area.lat != null && area.lon != null) {
     map.flyTo({ center: [area.lon, area.lat], zoom: Math.max(map.getZoom(), 12), speed: 1.4 });
@@ -300,6 +312,8 @@ function clearSelection() {
 
   updateChips(null);
   infoPanel.classList.add('hidden');
+  geoResults.innerHTML = '';
+  geoMsg.textContent = '';
   pushURLState();
 }
 
@@ -451,8 +465,12 @@ async function fetchWeatherForAreas(areas) {
   );
 }
 
-function renderGeoResults(nearest, weatherData) {
-  geoMsg.textContent = `${nearest.length} closest top-decile area${nearest.length !== 1 ? 's' : ''} — current weather:`;
+function renderGeoResults(nearest, weatherData, label) {
+  const n = nearest.length;
+  infoGeoTitle.textContent = `Sunny places near ${label}`;
+  infoGeoSub.textContent = `${n} closest top-decile area${n !== 1 ? 's' : ''} · live cloud cover`;
+  geoMsg.textContent = `${n} area${n !== 1 ? 's' : ''} found — see results →`;
+
   geoResults.innerHTML = nearest.map(({ code, area, distKm }, i) => {
     const w = weatherData[i];
     const icon = w ? cloudIcon(w.cloud_cover, w.is_day) : '—';
@@ -467,6 +485,8 @@ function renderGeoResults(nearest, weatherData) {
       </div>
     </div>`;
   }).join('');
+
+  showInfoPanel('geo');
 }
 
 async function geocodePlace(query) {
@@ -482,12 +502,12 @@ async function geocodePlace(query) {
   };
 }
 
-async function runGeoSearch(lat, lon, label) {
+async function runGeoSearch(lat, lon, label = 'your location') {
   const nearest = findSunnyNear(lat, lon, label);
   if (!nearest.length) return;
   try {
     const weatherData = await fetchWeatherForAreas(nearest);
-    renderGeoResults(nearest, weatherData);
+    renderGeoResults(nearest, weatherData, label);
   } catch {
     geoMsg.textContent = geoMsg.textContent.replace(' — fetching weather…', '');
   }
