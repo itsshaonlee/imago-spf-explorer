@@ -274,7 +274,25 @@ body {
   margin-bottom: 0.55rem;
 }
 
-/* ── Search section (serious) ───────────────────────────── */
+/* ── Explore section (serious) ──────────────────────────── */
+
+#explore-section {
+  background: rgba(3, 206, 163, 0.07);
+  border: 1px solid rgba(3, 206, 163, 0.25);
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+#explore-section > h3 {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--teal);
+}
 
 #search-section { display: flex; flex-direction: column; gap: 0.45rem; }
 
@@ -371,9 +389,9 @@ body {
 
 /* ── Decile section ─────────────────────────────────────── */
 
-#search-section h3,
-#decile-section h3,
-#legend-section h3 {
+#search-section h4,
+#decile-section h4,
+#legend-section h4 {
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
