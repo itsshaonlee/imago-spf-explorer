@@ -256,16 +256,27 @@ body {
 
 #reset-btn { background: rgba(255,255,255,0.07); color: var(--light-grey); margin-top: auto; }
 
-/* ── Geo section ────────────────────────────────────────── */
+/* ── Geo section (fun) ──────────────────────────────────── */
+
+#geo-section {
+  background: rgba(255, 143, 66, 0.07);
+  border: 1px solid rgba(255, 143, 66, 0.25);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
 
 #geo-section h3 {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--grey);
+  letter-spacing: 0.08em;
+  color: var(--orange);
   margin-bottom: 0.55rem;
 }
+
+/* ── Search section (serious) ───────────────────────────── */
+
+#search-section { display: flex; flex-direction: column; gap: 0.45rem; }
 
 #geo-input-row {
   display: flex;
@@ -360,6 +371,7 @@ body {
 
 /* ── Decile section ─────────────────────────────────────── */
 
+#search-section h3,
 #decile-section h3,
 #legend-section h3 {
   font-size: 0.7rem;

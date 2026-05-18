@@ -30,17 +30,6 @@
       <aside id="sidebar">
         <div id="sidebar-handle" role="button" aria-label="Toggle sidebar"></div>
 
-        <div id="search-container">
-          <input
-            id="search-input"
-            type="text"
-            placeholder="Search area name or code…"
-            autocomplete="off"
-            spellcheck="false"
-          >
-          <div id="search-results" style="display:none"></div>
-        </div>
-
         <div id="geo-section">
           <h3>Find me a sunny place</h3>
           <div id="geo-input-row">
@@ -55,6 +44,20 @@
           </div>
           <button id="geo-locate-btn" class="sidebar-btn">&#128205; Use my location</button>
           <p id="geo-msg"></p>
+        </div>
+
+        <div id="search-section">
+          <h3>Find an area</h3>
+          <div id="search-container">
+            <input
+              id="search-input"
+              type="text"
+              placeholder="Search area name or code…"
+              autocomplete="off"
+              spellcheck="false"
+            >
+            <div id="search-results" style="display:none"></div>
+          </div>
         </div>
 
         <div id="decile-section">

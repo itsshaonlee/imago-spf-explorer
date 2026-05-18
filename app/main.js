@@ -163,7 +163,7 @@ function setupLayers() {
     'source-layer': 'lsoa',
     paint: {
       'fill-color': ['coalesce', ['feature-state', 'color'], '#44445a'],
-      'fill-opacity': 0.75,
+      'fill-opacity': 0.92,
     },
   });
 
@@ -175,7 +175,7 @@ function setupLayers() {
     'source-layer': 'lsoa',
     paint: {
       'fill-color': ['coalesce', ['feature-state', 'color'], '#44445a'],
-      'fill-opacity': 0.9,
+      'fill-opacity': 0.97,
     },
     filter: neverFilter(),
   });
@@ -188,8 +188,8 @@ function setupLayers() {
     'source-layer': 'lsoa',
     minzoom: 9,
     paint: {
-      'line-color': 'rgba(255,255,255,0.09)',
-      'line-width': 0.4,
+      'line-color': 'rgba(255,255,255,0)',
+      'line-width': 0,
     },
   });
 
@@ -308,7 +308,7 @@ function clearSelection() {
   if (map.getLayer('lsoa-selected')) {
     map.setFilter('lsoa-selected', neverFilter());
     map.setFilter('lsoa-highlight', neverFilter());
-    map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.75);
+    map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.92);
   }
 
   updateChips(null);
@@ -784,7 +784,7 @@ async function init() {
   yearDisplay.textContent = currentYear;
   buildDecileChips();
 
-  if (map.loaded()) {
+  if (map.isStyleLoaded()) {
     setupLayers();
     restoreURLState();
   } else {
