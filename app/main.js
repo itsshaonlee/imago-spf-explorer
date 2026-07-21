@@ -6,26 +6,51 @@ const UK_CENTER     = [-3.0, 55.0];
 const UK_ZOOM       = 5;
 const GEO_RADIUS_KM = 10;
 
-const DECILE_COLORS = {
-  1:  '#0d47a1',
-  2:  '#1565c0',
-  3:  '#1976d2',
-  4:  '#1e88e5',
-  5:  '#2196f3',
-  6:  '#42a5f5',
-  7:  '#64b5f6',
-  8:  '#90caf9',
-  9:  '#bbdefb',
-  10: '#e3f2fd',
-};
+// Single hue (this app's own brand blue, #1877CF), pale/sunny (low value) to
+// dark navy/cloudy (high value), in increasing-value order. Built in OKLCH
+// with the hue held constant and lightness stepped evenly, so every step
+// stays visually distinct end to end — the original hand-picked blue ramp
+// had 5 of 9 adjacent steps below the minimum perceptible-lightness-gap.
+const COLOR_STOPS = [
+  '#d8eaff', '#aed4ff', '#83beff', '#52a6ff', '#398fe7',
+  '#1e79ce', '#0063b3', '#004f91', '#003b70', '#002950',
+];
+
+const SUNNY_PCT_THRESHOLD = 90; // top 10% nationally across all years
+const PEER_PCT_BAND = 2.5; // clicking an area highlights peers within +/- this many percentile points
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function rgbToHex([r, g, b]) {
+  return '#' + [r, g, b].map(c => Math.round(c).toString(16).padStart(2, '0')).join('');
+}
+
+// Maps a raw value to a colour along COLOR_STOPS, normalised against the
+// dataset-wide min/max (spfData.meta), so a given value renders identically
+// in every year rather than shifting with that year's own distribution.
+function valueToColor(value) {
+  const { value_min, value_max } = spfData.meta;
+  const t = Math.min(1, Math.max(0, (value - value_min) / (value_max - value_min)));
+  const idx = t * (COLOR_STOPS.length - 1);
+  const i0 = Math.floor(idx);
+  const i1 = Math.min(i0 + 1, COLOR_STOPS.length - 1);
+  const frac = idx - i0;
+  const c0 = hexToRgb(COLOR_STOPS[i0]);
+  const c1 = hexToRgb(COLOR_STOPS[i1]);
+  return rgbToHex(c0.map((v, i) => v + (c1[i] - v) * frac));
+}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let spfData      = null;
-let decileIndex  = {};  // { year: { decile: [code, …] } }
 let currentYear  = null;  // set from meta.years (latest) once data loads
 let selectedCode = null;
-let activeDecile = null;
+let rangeActive  = false;
+let rangeLo      = null;
+let rangeHi      = null;
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
@@ -40,7 +65,11 @@ const geoPlaceBtn   = document.getElementById('geo-place-btn');
 const geoLocateBtn  = document.getElementById('geo-locate-btn');
 const geoMsg        = document.getElementById('geo-msg');
 const geoResults    = document.getElementById('geo-results'); // lives in info-geo (right panel)
-const decileGrid    = document.getElementById('decile-grid');
+const rangeLoInput  = document.getElementById('range-lo');
+const rangeHiInput  = document.getElementById('range-hi');
+const rangeReadout  = document.getElementById('range-readout');
+const legendMinEl   = document.getElementById('legend-min');
+const legendMaxEl   = document.getElementById('legend-max');
 const resetBtn      = document.getElementById('reset-btn');
 const infoPanel     = document.getElementById('info-panel');
 const infoArea      = document.getElementById('info-area');
@@ -48,7 +77,8 @@ const infoGeo       = document.getElementById('info-geo');
 const infoName      = document.getElementById('info-name');
 const infoCodeEl    = document.getElementById('info-code');
 const infoValue     = document.getElementById('info-value');
-const infoDecileEl  = document.getElementById('info-decile');
+const infoPctLabel  = document.getElementById('info-pct-label');
+const infoPctEl     = document.getElementById('info-pct');
 const infoPeersNote = document.getElementById('info-peers-note');
 const infoClose     = document.getElementById('info-close');
 const infoGeoTitle  = document.getElementById('info-geo-title');
@@ -111,17 +141,6 @@ async function loadData() {
   const res = await fetch(DATA_PATH);
   if (!res.ok) throw new Error(`Could not load SPF data (${res.status})`);
   spfData = await res.json();
-
-  for (const year of spfData.meta.years) {
-    decileIndex[year] = {};
-    for (let d = 1; d <= 10; d++) decileIndex[year][d] = [];
-  }
-  for (const [code, area] of Object.entries(spfData.areas)) {
-    for (const year of spfData.meta.years) {
-      const yd = area[year];
-      if (yd) decileIndex[year][yd.decile].push(code);
-    }
-  }
 }
 
 // ── Feature-state choropleth ──────────────────────────────────────────────────
@@ -131,7 +150,7 @@ function applyYearStates(year) {
     const yd = area[year];
     map.setFeatureState(
       { source: 'lsoa', sourceLayer: 'lsoa', id: code },
-      { color: yd ? DECILE_COLORS[yd.decile] : null },
+      { color: yd ? valueToColor(yd.value) : null },
     );
   }
 }
@@ -147,6 +166,12 @@ function codesFilter(codes) {
   return ['match', ['get', 'data_zone_code'], codes, true, false];
 }
 
+// Keeps the highlight fill and its teal outline in sync — always the same set.
+function setHighlightFilter(filterExpr) {
+  map.setFilter('lsoa-highlight', filterExpr);
+  map.setFilter('lsoa-highlight-outline', filterExpr);
+}
+
 // ── Layer setup ───────────────────────────────────────────────────────────────
 
 function setupLayers() {
@@ -156,7 +181,10 @@ function setupLayers() {
     promoteId: { 'lsoa': 'data_zone_code' },
   });
 
-  // Choropleth fill — colour driven by feature-state set in applyYearStates()
+  // Choropleth fill — colour driven by feature-state set in applyYearStates().
+  // fill-antialias: false — with the ramp now spanning real lightness
+  // contrast, GL's default edge antialiasing between adjacent LSOAs of
+  // different colours read as a cluttered grid of seams; this removes it.
   map.addLayer({
     id: 'lsoa-fill',
     type: 'fill',
@@ -165,6 +193,7 @@ function setupLayers() {
     paint: {
       'fill-color': ['coalesce', ['feature-state', 'color'], '#44445a'],
       'fill-opacity': 0.92,
+      'fill-antialias': false,
     },
   });
 
@@ -177,21 +206,25 @@ function setupLayers() {
     paint: {
       'fill-color': ['coalesce', ['feature-state', 'color'], '#44445a'],
       'fill-opacity': 0.97,
+      'fill-antialias': false,
     },
     filter: neverFilter(),
   });
 
-  // Subtle boundary lines at higher zoom
+  // Teal outline on highlighted areas — a hue distinct from the whole blue
+  // ramp, so "highlighted" reads clearly regardless of each area's own
+  // colour, instead of relying on the fill-opacity bump alone.
   map.addLayer({
-    id: 'lsoa-outline',
+    id: 'lsoa-highlight-outline',
     type: 'line',
     source: 'lsoa',
     'source-layer': 'lsoa',
-    minzoom: 9,
     paint: {
-      'line-color': 'rgba(255,255,255,0)',
-      'line-width': 0,
+      'line-color': '#03CEA3',
+      'line-width': 1.5,
+      'line-opacity': 0.9,
     },
+    filter: neverFilter(),
   });
 
   // Selected area outline (white)
@@ -273,26 +306,33 @@ function selectArea(code, fly = false) {
   if (!area) return;
 
   selectedCode = code;
-  activeDecile = null;
+  rangeActive  = false;
 
-  const yd     = area[currentYear];
-  const decile = yd?.decile ?? null;
-  const peers  = decile ? decileIndex[currentYear][decile] : [];
-  const count  = peers.length;
+  const yd = area[currentYear];
+  let peerCount = 0;
 
   map.setFilter('lsoa-selected', ['==', ['get', 'data_zone_code'], code]);
-  map.setFilter('lsoa-highlight', codesFilter(peers));
   map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.35);
 
-  updateChips(decile);
+  if (yd) {
+    const peers = [];
+    for (const [otherCode, otherArea] of Object.entries(spfData.areas)) {
+      const otherYd = otherArea[currentYear];
+      if (otherYd && Math.abs(otherYd.pct - yd.pct) <= PEER_PCT_BAND) peers.push(otherCode);
+    }
+    peerCount = peers.length;
+    setHighlightFilter(codesFilter(peers));
+  } else {
+    setHighlightFilter(neverFilter());
+  }
 
-  infoName.textContent      = area.name || code;
-  infoCodeEl.textContent    = code;
-  infoValue.textContent     = yd ? `${yd.value.toFixed(1)}` : '—';
-  infoDecileEl.textContent  = decile ? `${decile} / 10` : '—';
-  infoDecileEl.style.color  = decile ? DECILE_COLORS[decile] : 'inherit';
-  infoPeersNote.textContent = decile
-    ? `${count.toLocaleString()} areas share decile ${decile} nationally`
+  infoName.textContent   = area.name || code;
+  infoCodeEl.textContent = code;
+  infoValue.textContent  = yd ? `${yd.value.toFixed(1)}` : '—';
+  infoPctEl.textContent  = yd ? `${ordinal(yd.pct)} percentile` : '—';
+  infoPctEl.style.color  = yd ? valueToColor(yd.value) : 'inherit';
+  infoPeersNote.textContent = yd
+    ? `${peerCount.toLocaleString()} areas within ±${PEER_PCT_BAND} percentile nationally`
     : '';
   showInfoPanel('area');
 
@@ -305,59 +345,95 @@ function selectArea(code, fly = false) {
 
 function clearSelection() {
   selectedCode = null;
-  activeDecile = null;
+  clearRange();
 
   if (map.getLayer('lsoa-selected')) {
     map.setFilter('lsoa-selected', neverFilter());
-    map.setFilter('lsoa-highlight', neverFilter());
+    setHighlightFilter(neverFilter());
     map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.92);
   }
 
-  updateChips(null);
   infoPanel.classList.add('hidden');
   geoResults.innerHTML = '';
   geoMsg.textContent = '';
   pushURLState();
 }
 
-// ── Decile chips ──────────────────────────────────────────────────────────────
-
-function buildDecileChips() {
-  decileGrid.innerHTML = '';
-  for (let d = 1; d <= 10; d++) {
-    const btn = document.createElement('button');
-    btn.className = 'decile-chip';
-    btn.dataset.decile = d;
-    btn.textContent = d;
-    btn.style.background = DECILE_COLORS[d];
-    btn.style.color = d <= 6 ? '#ffffff' : '#0e0e1a';
-    btn.title = d === 1 ? 'Most cloudy' : d === 10 ? 'Most sunny' : `Decile ${d}`;
-    btn.addEventListener('click', () => highlightDecile(d));
-    decileGrid.appendChild(btn);
+function ordinal(n) {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
   }
 }
 
-function updateChips(activeD) {
-  for (const chip of decileGrid.querySelectorAll('.decile-chip')) {
-    chip.classList.toggle('active', Number(chip.dataset.decile) === activeD);
+// ── Value-range slider ───────────────────────────────────────────────────────
+
+function initRangeSlider() {
+  const { value_min, value_max } = spfData.meta;
+  for (const input of [rangeLoInput, rangeHiInput]) {
+    input.min = value_min;
+    input.max = value_max;
+    input.step = 0.1;
   }
+  rangeLoInput.value = value_min;
+  rangeHiInput.value = value_max;
+  updateRangeReadout(value_min, value_max);
 }
 
-function highlightDecile(decile) {
+function updateRangeReadout(lo, hi) {
+  rangeReadout.textContent = `${lo.toFixed(1)} – ${hi.toFixed(1)}`;
+}
+
+function applyRange(lo, hi) {
   selectedCode = null;
-  activeDecile = decile;
+  rangeActive = true;
+  rangeLo = lo;
+  rangeHi = hi;
+  updateRangeReadout(lo, hi);
 
-  const peers = decileIndex[currentYear][decile] || [];
-  if (map.getLayer('lsoa-highlight')) {
-    map.setFilter('lsoa-selected', neverFilter());
-    map.setFilter('lsoa-highlight', codesFilter(peers));
-    map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.35);
+  const codes = [];
+  for (const [code, area] of Object.entries(spfData.areas)) {
+    const yd = area[currentYear];
+    if (yd && yd.value >= lo && yd.value <= hi) codes.push(code);
   }
 
-  updateChips(decile);
+  map.setFilter('lsoa-selected', neverFilter());
+  setHighlightFilter(codesFilter(codes));
+  map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.35);
+
   infoPanel.classList.add('hidden');
   pushURLState();
 }
+
+function clearRange() {
+  rangeActive = false;
+  rangeLo = null;
+  rangeHi = null;
+  if (spfData) {
+    const { value_min, value_max } = spfData.meta;
+    rangeLoInput.value = value_min;
+    rangeHiInput.value = value_max;
+    updateRangeReadout(value_min, value_max);
+  }
+}
+
+function onRangeInput() {
+  let lo = Number(rangeLoInput.value);
+  let hi = Number(rangeHiInput.value);
+  if (lo > hi) {
+    if (document.activeElement === rangeLoInput) hi = lo; else lo = hi;
+    rangeLoInput.value = lo;
+    rangeHiInput.value = hi;
+  }
+  applyRange(lo, hi);
+}
+
+rangeLoInput.addEventListener('input', onRangeInput);
+rangeHiInput.addEventListener('input', onRangeInput);
 
 // ── Search ────────────────────────────────────────────────────────────────────
 
@@ -411,14 +487,15 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Returns up to 10 closest top-decile areas within GEO_RADIUS_KM, sorted by distance.
+// Returns up to 10 closest areas in the sunniest 10% nationally (across all
+// years) within GEO_RADIUS_KM, sorted by distance.
 function findSunnyNear(lat, lon, label = 'your location') {
   geoResults.innerHTML = '';
   const candidates = [];
   for (const [code, area] of Object.entries(spfData.areas)) {
     if (area.lat == null || area.lon == null) continue;
     const yd = area[currentYear];
-    if (!yd || yd.decile !== 10) continue;
+    if (!yd || yd.pct < SUNNY_PCT_THRESHOLD) continue;
     const distKm = haversineKm(lat, lon, area.lat, area.lon);
     if (distKm <= GEO_RADIUS_KM) candidates.push({ code, area, distKm });
   }
@@ -430,15 +507,13 @@ function findSunnyNear(lat, lon, label = 'your location') {
   if (!nearest.length) return [];
 
   selectedCode = null;
-  activeDecile = 10;
   map.setFilter('lsoa-selected', neverFilter());
-  map.setFilter('lsoa-highlight', codesFilter(nearest.map(c => c.code)));
+  setHighlightFilter(codesFilter(nearest.map(c => c.code)));
   map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.35);
-  updateChips(10);
 
   const total = candidates.length;
   geoMsg.textContent =
-    `${total} top-decile area${total !== 1 ? 's' : ''} within ${GEO_RADIUS_KM} km of ${label} — fetching weather…`;
+    `${total} sunniest-10% area${total !== 1 ? 's' : ''} within ${GEO_RADIUS_KM} km of ${label} — fetching weather…`;
 
   return nearest;
 }
@@ -465,19 +540,19 @@ async function fetchWeatherForAreas(areas) {
   );
 }
 
-// C) sunny at search point, but all top-decile areas are cloudy
+// C) sunny at search point, but all sunniest-10% areas nearby are cloudy
 const IRONY_QUIPS = {
   england: [
     'You\'ve got the sun — your top picks haven\'t. Swings and roundabouts.',
-    'You\'re in the clear while your top deciles are under cloud. SPF\'s just an average.',
+    'You\'re in the clear while the sunniest spots nearby are under cloud. SPF\'s just an average.',
     'Funny — you\'re sunny, they\'re not. Make of that what you will.',
   ],
   scotland: [
     'Aye, you\'re sunny but your top picks are dreich. SPF\'s just an average, mind.',
-    'You\'re in the clear. Your top deciles are not. Swings and roundabouts.',
+    'You\'re in the clear. The sunniest spots nearby are not. Swings and roundabouts.',
   ],
   wales: [
-    'You\'ve got the sun but your top deciles haven\'t. The valleys keep their secrets.',
+    'You\'ve got the sun but the sunniest spots nearby haven\'t. The valleys keep their secrets.',
     'Sunny where you are, cloudy where it counts. Very SPF.',
   ],
   northern_ireland: [
@@ -488,8 +563,8 @@ const IRONY_QUIPS = {
 
 const NO_NEARBY_QUIPS = {
   england: [
-    'No top-decile spots within 10 km. You may need to relocate.',
-    'Nothing in the top decile nearby. Might be time to move.',
+    'No sunniest-10% spots within 10 km. You may need to relocate.',
+    'Nothing in the sunniest 10% nearby. Might be time to move.',
     'Not a sunny LSOA in sight. England, innit.',
   ],
   scotland: [
@@ -499,11 +574,11 @@ const NO_NEARBY_QUIPS = {
   ],
   wales: [
     'No sunny spots within 10 km. The clouds are thorough today.',
-    'Nothing nearby in the top decile. Very Welsh.',
+    'Nothing nearby in the sunniest 10%. Very Welsh.',
   ],
   northern_ireland: [
     'No luck nearby. Sure, what did you expect?',
-    'Nowt in the top decile nearby. You\'re on your own.',
+    'Nowt in the sunniest 10% nearby. You\'re on your own.',
   ],
 };
 
@@ -583,7 +658,7 @@ function renderGeoResults(nearest, weatherData, label, country = 'england', sear
 
   let subtitle;
   if (searchSunny && allCloudy) {
-    // C) searcher is sunny, all top-decile areas are cloudy
+    // C) searcher is sunny, all sunniest-10% areas nearby are cloudy
     const pool = IRONY_QUIPS[country] || IRONY_QUIPS.england;
     subtitle = pool[Math.floor(Math.random() * pool.length)];
   } else if (searchSunny) {
@@ -591,11 +666,11 @@ function renderGeoResults(nearest, weatherData, label, country = 'england', sear
     const pool = SUNNY_QUIPS[country] || SUNNY_QUIPS.england;
     subtitle = pool[Math.floor(Math.random() * pool.length)];
   } else if (allCloudy) {
-    // D) all top-decile areas are cloudy
+    // D) all sunniest-10% areas nearby are cloudy
     const pool = CLOUDY_QUIPS[country] || CLOUDY_QUIPS.england;
     subtitle = pool[Math.floor(Math.random() * pool.length)];
   } else {
-    subtitle = `${n} closest top-decile area${n !== 1 ? 's' : ''} · live cloud cover`;
+    subtitle = `${n} closest sunniest-10% area${n !== 1 ? 's' : ''} · live cloud cover`;
   }
   infoGeoSub.textContent = subtitle;
 
@@ -654,12 +729,12 @@ async function runGeoSearch(lat, lon, label = 'your location', country = 'englan
     const searchWeather = await searchWeatherPromise;
     const searchSunny = searchWeather && searchWeather.is_day && searchWeather.cloud_cover <= 30;
     geoMsg.textContent = '';
-    infoGeoTitle.textContent = `No top-decile areas near ${label}`;
+    infoGeoTitle.textContent = `No sunniest-10% areas near ${label}`;
     geoResults.innerHTML = '';
 
     if (searchSunny) {
-      // B) sunny at search point but no top-decile areas nearby
-      infoGeoSub.textContent = 'No top-decile LSOAs within 10 km — but look outside:';
+      // B) sunny at search point but no sunniest-10% areas nearby
+      infoGeoSub.textContent = 'No sunniest-10% LSOAs within 10 km — but look outside:';
       geoResults.innerHTML = `<div class="geo-result-item">
         <span class="geo-result-icon">${cloudIcon(searchWeather.cloud_cover, 1)}</span>
         <div class="geo-result-info">
@@ -748,7 +823,7 @@ infoClose.addEventListener('click', () => clearSelection());
 function pushURLState() {
   const params = new URLSearchParams();
   if (selectedCode) params.set('area', selectedCode);
-  if (activeDecile) params.set('decile', activeDecile);
+  if (rangeActive) params.set('range', `${rangeLo}-${rangeHi}`);
   if (currentYear !== spfData?.meta.years.at(-1)) params.set('year', currentYear);
   const qs = params.toString();
   history.replaceState({}, '', qs ? `?${qs}` : window.location.pathname);
@@ -767,8 +842,16 @@ function restoreURLState() {
   const area = params.get('area');
   if (area && spfData.areas[area]) { selectArea(area, true); return; }
 
-  const decile = parseInt(params.get('decile') || '');
-  if (decile >= 1 && decile <= 10) highlightDecile(decile);
+  const rangeParam = params.get('range') || '';
+  const [loStr, hiStr] = rangeParam.split('-');
+  const lo = parseFloat(loStr);
+  const hi = parseFloat(hiStr);
+  const { value_min, value_max } = spfData.meta;
+  if (!Number.isNaN(lo) && !Number.isNaN(hi) && lo <= hi && lo >= value_min && hi <= value_max) {
+    rangeLoInput.value = lo;
+    rangeHiInput.value = hi;
+    applyRange(lo, hi);
+  }
 }
 
 // ── Mobile sidebar toggle ─────────────────────────────────────────────────────
@@ -790,7 +873,11 @@ async function init() {
   yearMax.textContent = years.at(-1);
   yearDisplay.textContent = currentYear;
   syncYearControl();
-  buildDecileChips();
+
+  initRangeSlider();
+  infoPctLabel.textContent = `Percentile rank (UK, ${years[0]}–${years.at(-1)})`;
+  legendMinEl.textContent = spfData.meta.value_min.toFixed(1);
+  legendMaxEl.textContent = spfData.meta.value_max.toFixed(1);
 
   if (map.isStyleLoaded()) {
     setupLayers();

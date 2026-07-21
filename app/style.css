@@ -408,10 +408,10 @@ body {
 #geo-weather.partial { border-left-color: #90caf9; color: var(--light-grey); }
 #geo-weather.cloudy  { border-left-color: var(--grey); color: var(--grey); }
 
-/* ── Decile section ─────────────────────────────────────── */
+/* ── Value-range slider ─────────────────────────────────── */
 
 #search-section h4,
-#decile-section h4,
+#range-section h4,
 #legend-section h4 {
   font-size: 0.7rem;
   font-weight: 700;
@@ -421,41 +421,92 @@ body {
   margin-bottom: 0.55rem;
 }
 
-#decile-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0.35rem;
+#range-slider {
+  position: relative;
+  height: 20px;
 }
 
-.decile-chip {
-  padding: 0.38rem 0;
-  border-radius: 5px;
-  border: 2px solid transparent;
+#range-slider input[type="range"] {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 100%;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+#range-slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.22);
+}
+
+#range-slider input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.22);
+}
+
+#range-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--light-grey);
   cursor: pointer;
-  font-family: 'Figtree', sans-serif;
-  font-size: 0.82rem;
-  font-weight: 700;
-  text-align: center;
-  transition: border-color 0.12s, transform 0.1s;
+  margin-top: -5px;
+  transition: transform 0.15s;
 }
 
-.decile-chip:hover { transform: scale(1.07); }
-.decile-chip.active { border-color: #fff; }
+#range-slider input[type="range"]::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--light-grey);
+  cursor: pointer;
+}
 
-.decile-hint {
+#range-slider input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.15); }
+
+.range-readout {
   font-size: 0.7rem;
   color: var(--grey);
   margin-top: 0.4rem;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Legend ─────────────────────────────────────────────── */
 
-#legend { display: flex; flex-direction: column; gap: 0.35rem; }
+#legend-gradient {
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(to right,
+    #d8eaff, #aed4ff, #83beff, #52a6ff, #398fe7,
+    #1e79ce, #0063b3, #004f91, #003b70, #002950);
+}
 
-.legend-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+#legend-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--grey);
+  margin-top: 0.3rem;
+  font-variant-numeric: tabular-nums;
+}
 
-.legend-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+.legend-caption {
+  font-size: 0.7rem;
+  color: var(--grey);
+  margin-top: 0.25rem;
+  text-align: center;
+}
 
 /* ── Mobile (≤768px) ────────────────────────────────────── */
 

@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Version | 0.3 — updated to reflect built implementation |
+| Version | 0.4 — deciles replaced with continuous value + percentile rank |
 | Status | Live on GitHub Pages |
 | Data | SPF GeoPackages 2023–2025 (Imago) · layer names vary by year (see §3.2) |
 | Hosting | GitHub Pages (`itsshaonlee/imago-spf-explorer` → transfer to Imago-SDRUK) |
@@ -14,9 +14,11 @@
 
 ## 1. Overview
 
-The SPF Explorer is a public-facing interactive web map that lets anyone browse cloud probability values (Sun Probability Framework) for every small area in the UK. The core interaction is: click an LSOA or Data Zone, see its national decile, and see every other small area in the same decile highlighted on the map.
+The SPF Explorer is a public-facing interactive web map that lets anyone browse cloud probability values (Sun Probability Framework) for every small area in the UK. The core interaction is: click an LSOA or Data Zone, see its raw value and national percentile rank, and optionally drag a value-range slider to highlight every other small area nationally whose current-year value falls in that range.
 
-A secondary entry point — **Find sunny near me** — uses browser geolocation to fly to the user's location and highlight the highest-decile small areas within a 10 km radius.
+A secondary entry point — **Find sunny near me** — uses browser geolocation to fly to the user's location and highlight the sunniest 10% of small areas (by percentile rank) within a 10 km radius.
+
+> **Why not deciles?** Deciles were originally assigned per year via `pd.qcut`, independently for each year. That meant the same raw value could land in a different decile in different years purely because that year's national distribution shifted — masking real year-to-year change once the year range grew past 2 years. Percentile rank and the colour scale are now both computed once against the *entire* dataset (all years × all areas), so a given value reads identically no matter which year is selected.
 
 > **Design reference:** Modelled on the Imago Embeddings UK Explorer (`Imago-SDRUK/embeddings-uk-explorer`). Carto Dark Matter (no-labels) basemap. Figtree font. SDR-UK brand palette.
 
@@ -26,10 +28,10 @@ A secondary entry point — **Find sunny near me** — uses browser geolocation 
 
 ### 2.1 Browse and click
 
-- On load: map centred on UK, all small areas visible as a choropleth (SPF decile → colour)
-- Click any area: right panel populates, map highlights all peers in the same national decile
+- On load: map centred on UK, all small areas visible as a choropleth (SPF value → continuous colour, scaled against the whole dataset's min/max)
+- Click any area: right panel populates with raw value and national percentile rank; map highlights all peers nationally within ±2.5 percentile points (current year) — the equivalent of the old same-decile highlight, at percentile-rank granularity instead of a 10-way bucket
 - Clicking a different area replaces selection; clicking the same area deselects
-- Reset button returns to overview, clears selection and highlights
+- Reset button returns to overview, clears selection, range highlight, and geo results
 
 ### 2.2 Search
 
@@ -39,7 +41,7 @@ A secondary entry point — **Find sunny near me** — uses browser geolocation 
 ### 2.3 Find sunny near me
 
 - Button triggers browser Geolocation API
-- On success: map flies to user location, highlights top-decile (decile 10) areas within 10 km
+- On success: map flies to user location, highlights areas at or above the 90th percentile (sunniest 10% nationally, computed across all years) within 10 km
 - On denial/error: polite inline message, does not block other functionality
 
 ### 2.4 Year selector
@@ -51,13 +53,14 @@ A secondary entry point — **Find sunny near me** — uses browser geolocation 
 ### 2.5 Shareable URLs
 
 - URL updates on every meaningful state change using the History API (no page reload)
-- Parameters: `?area=E01004190`, `?year=2023`, `?decile=5` — sufficient to restore full view
-- Sharing a URL opens the map zoomed to that area, year, and decile highlight
+- Parameters: `?area=E01004190`, `?year=2023`, `?range=50.6-70.2` — sufficient to restore full view
+- Sharing a URL opens the map zoomed to that area, year, and range highlight
 
-### 2.6 Jump to decile
+### 2.6 Value-range slider
 
-- 10-chip grid in sidebar: clicking a chip highlights all areas in that decile nationally
-- Active chip reflects the clicked area's decile when a map selection is made
+- Dual-thumb range slider in sidebar, bounded by the dataset-wide min/max value
+- Dragging either thumb highlights all areas nationally whose *current year* value falls within `[lo, hi]`
+- Selecting an area or hitting Reset clears the range back to full bounds (inactive state)
 
 ---
 
@@ -102,11 +105,14 @@ data/raw/SPF_LSOA_2025.gpkg
 | Direction | Low = more sun · High = more cloud |
 | Display | Show as-is in info panel (e.g. `57.5`). No further scaling needed. |
 
-### 3.4 Deciles
+### 3.4 Value range and percentile rank
 
-Computed nationally across all 46,844 UK small areas, per year independently. Decile 1 = highest cloud (least sun). Decile 10 = lowest cloud (most sun). Computed using `pd.qcut(q=10, labels=range(10,0,-1))`.
+Computed once across the **entire** dataset — all years × all 46,844 UK small areas — not per year:
 
-> **Rationale:** National deciles are simpler to communicate than regional. A user seeing "decile 3" understands they are in the cloudier third of the UK.
+- `value_min` / `value_max`: the raw `cloudprob_corrected_mean` min/max across every row. Drives the continuous colour scale (`valueToColor` in `main.js`) so a given value renders identically in every year.
+- `pct`: a sun-adjusted percentile rank per area/year, `0`–`100`. Computed as `(1 - rank(value, pct=True)) * 100` over the full dataset, so `100` = sunniest 1% of all area-years, `0` = cloudiest. Direction matches the old decile-10-is-sunniest convention. Shown in the info panel as "Percentile rank (UK, `{minYear}`–`{maxYear}`)".
+
+> **Rationale:** per-year deciles (`pd.qcut(q=10, ...)` recomputed each year) meant the same raw value could land in a different bucket in different years purely because that year's distribution shifted. A single global min/max and percentile avoids that.
 
 ### 3.5 Area names and centroids
 
@@ -131,19 +137,21 @@ Output of the build pipeline. Committed to `data/processed/spf-data.json`. Loade
 ```json
 {
   "meta": {
-    "years": [2023, 2024, 2025],
-    "generated": "2026-05-01",
+    "years": [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+    "generated": "2026-07-21",
     "value_col": "cloudprob_corrected_mean",
-    "code_col": "data_zone_code"
+    "code_col": "data_zone_code",
+    "value_min": 50.59,
+    "value_max": 89.06
   },
   "areas": {
     "E01000001": {
       "name": "City of London 001A",
       "lat": 51.514,
       "lon": -0.092,
-      "2023": { "value": 57.54, "decile": 3 },
-      "2024": { "value": 55.12, "decile": 4 },
-      "2025": { "value": 56.80, "decile": 3 }
+      "2023": { "value": 57.54, "pct": 62 },
+      "2024": { "value": 55.12, "pct": 71 },
+      "2025": { "value": 56.80, "pct": 65 }
     }
   }
 }
@@ -184,28 +192,25 @@ Tiles (geometry) and data (SPF values) are kept strictly separate. Tiles are bui
 | Tile source | `pmtiles://` protocol — MapLibre fetches byte ranges from `lsoa.pmtiles` |
 | Choropleth | `setFeatureState` per area → `['coalesce', ['feature-state', 'color'], '#44445a']` in paint |
 | `promoteId` | `{ 'lsoa': 'data_zone_code' }` — uses the area code as MapLibre feature ID |
-| Data join | JS object built at startup: `code → { name, lat, lon, year → { value, decile } }` |
-| Click handler | Reads `data_zone_code` from clicked feature → decile lookup → filter for peer outlines |
-| Geolocation | Browser Geolocation API → `flyTo` → haversine filter for nearby top-decile areas |
+| Data join | JS object built at startup: `code → { name, lat, lon, year → { value, pct } }` |
+| Click handler | Reads `data_zone_code` from clicked feature → shows raw value + percentile in info panel → filters `lsoa-highlight` to peers within ±2.5 percentile points nationally (current year) |
+| Range slider | Two `<input type=range>` bounded by `meta.value_min`/`value_max` → filters current year's areas to `[lo, hi]` → highlight layer |
+| Geolocation | Browser Geolocation API → `flyTo` → haversine filter for nearby areas with `pct >= 90` |
 | URL state | History API `replaceState` on click/year change; parsed on load to restore state |
 | Font | Figtree via Google Fonts |
 | Default view | UK centred: `[-3.0, 55.0]`, zoom 5 |
 
 ### 4.4 Colour ramp
 
-| Decile | Colour |
-|---|---|
-| 1 — most cloud | `#24226F` — SDR-UK Navy |
-| 2–3 | `#1877CF` — SDR-UK Blue |
-| 4–6 | `#03CEA3` — SDR-UK Green/Teal |
-| 7–8 | `#8EC840` — yellow-green |
-| 9–10 — most sun | `#FF8F42` — SDR-UK Orange |
+Continuous, not discrete. `COLOR_STOPS` in `main.js` holds 10 hex values, one hue (this app's brand blue, `#1877CF`), pale/sunniest → dark navy/cloudiest; `valueToColor(value)` normalises the value against `meta.value_min`/`value_max` and linearly interpolates the RGB channels between the two nearest stops. Identical across years since the min/max are fixed once, globally.
+
+> **Why not the original hand-picked blue ramp?** It measured badly: 5 of its 9 adjacent steps fell below the minimum perceptible-lightness-gap (OKLCH ΔL ≥ 0.06), concentrated in the value range most UK areas actually occupy — areas that were meaningfully different in cloud probability looked nearly identical on the map. A two-hue warm/cool version was tried and rejected in favour of staying single-hue; the fix that shipped holds the brand blue's hue constant and steps OKLCH lightness evenly across all 10 stops, so every step stays visually distinct end to end without introducing a second hue.
 
 | State | Style |
 |---|---|
 | Selected area | White `#FFFFFF` outline, 2px, full opacity |
-| Peer areas (same decile) | Teal `#03CEA3` outline, 1.5px, opacity 0.9 |
-| Non-peer / background | fill-opacity 0.45 when any selection is active; 0.75 otherwise |
+| Highlighted areas (click-a-area peers within ±2.5 percentile, value-range slider, or "find sunny near me") | Teal `#03CEA3` outline, 1.5px, opacity 0.9 — `lsoa-highlight-outline` layer, filter always kept in sync with the `lsoa-highlight` fill via `setHighlightFilter()` |
+| Non-highlighted / background | fill-opacity 0.35 when any selection/range is active; 0.92 otherwise |
 
 ---
 
@@ -228,7 +233,7 @@ imago-spf-explorer/
     lsoa.pmtiles                # committed — 95 MiB, brotli
   pipeline/
     extract.py                  # GeoPackages → tidy CSV
-    deciles.py                  # assign deciles, merge names, build JSON
+    deciles.py                  # global value stats + percentile, merge names, build JSON
     build_tiles.ps1             # one-time: GDAL MVT tile pyramid (Windows)
     build_pmtiles.py            # one-time: tiles/ → lsoa.pmtiles
     requirements.txt            # geopandas, pandas, numpy, pyogrio, pmtiles, brotli
@@ -261,7 +266,7 @@ Output: `data/processed/spf_all_years.csv` — columns: `data_zone_code, year, c
 - Reads `data/raw/UK_LSOA_DZ.gpkg` for area names and centroids (no `layer=` arg)
 - Computes centroids in EPSG:27700, reprojects to EPSG:4326 for `lat`/`lon`
 - Extracts nation-appropriate name column per area
-- For each year: assigns decile 1–10 using `pd.qcut(q=10, labels=range(10,0,-1))`
+- Computes `value_min`/`value_max` once across the whole dataset (all years, all areas) and a sun-adjusted percentile rank (`pct`) per row, also computed against the whole dataset (see §3.4) — no more per-year `pd.qcut`
 - Builds nested JSON (see §3.6 schema)
 - Writes `data/processed/spf-data.json`
 
@@ -329,7 +334,7 @@ conda activate raster_env
 # 2. Extract values from all GeoPackages
 python pipeline\extract.py
 
-# 3. Assign deciles, build JSON
+# 3. Compute global value stats + percentile, build JSON
 python pipeline\deciles.py
 
 # 4. (Boundaries only — skip if already built) Build tile pyramid
@@ -367,10 +372,10 @@ The three-panel desktop layout collapses at viewports below 768px into a full-sc
 | Token | Value |
 |---|---|
 | Font | Figtree (Google Fonts) — Bold for headings/labels, Regular for body |
-| Navy | `#24226F` — topbar, headings, decile 1 fill |
-| Teal | `#03CEA3` — highlights, active states, decile 5 fill |
-| Blue | `#1877CF` — links, decile 3 fill |
-| Orange | `#FF8F42` — decile 10 fill, logo accent |
+| Navy | `#24226F` — topbar, headings |
+| Teal | `#03CEA3` — highlights, active states |
+| Blue | `#1877CF` — links |
+| Orange | `#FF8F42` — logo accent |
 | Grey | `#8C91A8` — secondary text, muted labels |
 | Light grey | `#E2E5F3` — subtle backgrounds |
 | Imago accent | `#4A4A49` — neutral dark |

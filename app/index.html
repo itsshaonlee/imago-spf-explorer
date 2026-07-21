@@ -65,21 +65,23 @@
             </div>
           </div>
 
-          <div id="decile-section">
-            <h4>Jump to decile</h4>
-            <div id="decile-grid"></div>
-            <p class="decile-hint">1 = most cloudy &nbsp;·&nbsp; 10 = most sunny</p>
+          <div id="range-section">
+            <h4>Highlight a value range</h4>
+            <div id="range-slider">
+              <input id="range-lo" type="range" aria-label="Minimum cloud probability">
+              <input id="range-hi" type="range" aria-label="Maximum cloud probability">
+            </div>
+            <p class="range-readout" id="range-readout"></p>
           </div>
 
           <div id="legend-section">
             <h4>Legend</h4>
-            <div id="legend">
-              <div class="legend-row"><span class="legend-swatch" style="background:#e3f2fd"></span><span>Decile 9–10 (most sunny)</span></div>
-              <div class="legend-row"><span class="legend-swatch" style="background:#64b5f6"></span><span>Decile 7–8</span></div>
-              <div class="legend-row"><span class="legend-swatch" style="background:#2196f3"></span><span>Decile 4–6</span></div>
-              <div class="legend-row"><span class="legend-swatch" style="background:#1565c0"></span><span>Decile 2–3</span></div>
-              <div class="legend-row"><span class="legend-swatch" style="background:#0d47a1"></span><span>Decile 1 (most cloudy)</span></div>
+            <div id="legend-gradient"></div>
+            <div id="legend-labels">
+              <span id="legend-min"></span>
+              <span id="legend-max"></span>
             </div>
+            <p class="legend-caption">sunnier &nbsp;·&nbsp; cloudier</p>
           </div>
         </div>
 
@@ -100,8 +102,8 @@
             <span id="info-value" class="info-stat-value"></span>
           </div>
           <div class="info-stat">
-            <span class="info-stat-label">National decile</span>
-            <span id="info-decile" class="info-stat-value"></span>
+            <span class="info-stat-label" id="info-pct-label">Percentile rank</span>
+            <span id="info-pct" class="info-stat-value"></span>
           </div>
           <p class="info-peers-note" id="info-peers-note"></p>
         </div>

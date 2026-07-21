@@ -1,4 +1,4 @@
-"""Assign national deciles, merge area names + centroids, write spf-data.json."""
+"""Merge area names + centroids, add global stats, write spf-data.json."""
 import json
 from datetime import date
 from pathlib import Path
@@ -37,18 +37,6 @@ def load_names_and_centroids() -> dict:
     )
 
 
-def assign_deciles(df: pd.DataFrame) -> pd.DataFrame:
-    """Decile 1 = most cloud (highest cloudprob), 10 = most sun (lowest cloudprob)."""
-    df = df.copy()
-    df["decile"] = pd.qcut(
-        df["cloudprob_corrected_mean"],
-        q=10,
-        labels=range(10, 0, -1),
-        duplicates="drop",
-    ).astype(int)
-    return df
-
-
 meta = load_names_and_centroids()
 
 print("Reading spf_all_years.csv ...")
@@ -57,23 +45,32 @@ df = pd.read_csv(SPF_CSV)
 years = sorted(df["year"].unique().tolist())
 print(f"Years: {years}")
 
+# Stats are computed once across the whole dataset (every year, every area) so
+# a given value renders as the same colour/percentile no matter which year is
+# selected - deciles recomputed per year would mask real year-to-year change.
+value_min = float(df["cloudprob_corrected_mean"].min())
+value_max = float(df["cloudprob_corrected_mean"].max())
+print(f"Global value range: {value_min:.2f} - {value_max:.2f}")
+
+# Ascending rank on cloud probability (1.0 = cloudiest); invert so higher
+# percentile means sunnier, matching the old decile-10-is-sunniest direction.
+cloud_pct_rank = df["cloudprob_corrected_mean"].rank(pct=True)
+df["pct"] = ((1 - cloud_pct_rank) * 100).round().astype(int)
+
 areas: dict = {}
-for year, group in df.groupby("year"):
-    print(f"  Assigning deciles for {year} ...")
-    group = assign_deciles(group)
-    for row in group.itertuples(index=False):
-        code = row.data_zone_code
-        if code not in areas:
-            m = meta.get(code, {})
-            areas[code] = {
-                "name": m.get("area_name", code),
-                "lat": m.get("lat"),
-                "lon": m.get("lon"),
-            }
-        areas[code][str(year)] = {
-            "value": round(float(row.cloudprob_corrected_mean), 2),
-            "decile": int(row.decile),
+for row in df.itertuples(index=False):
+    code = row.data_zone_code
+    if code not in areas:
+        m = meta.get(code, {})
+        areas[code] = {
+            "name": m.get("area_name", code),
+            "lat": m.get("lat"),
+            "lon": m.get("lon"),
         }
+    areas[code][str(row.year)] = {
+        "value": round(float(row.cloudprob_corrected_mean), 2),
+        "pct": int(row.pct),
+    }
 
 payload = {
     "meta": {
@@ -81,6 +78,8 @@ payload = {
         "generated": date.today().isoformat(),
         "value_col": "cloudprob_corrected_mean",
         "code_col": "data_zone_code",
+        "value_min": round(value_min, 2),
+        "value_max": round(value_max, 2),
     },
     "areas": areas,
 }
