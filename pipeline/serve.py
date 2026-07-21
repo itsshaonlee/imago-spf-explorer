@@ -43,13 +43,23 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
         return f
 
     def log_message(self, fmt, *args):
-        print(f'  {args[0]}  {args[1]}  {self.path[:80]}')
+        print(f'  {args[0]}  {args[1]}  {self.path[:80]}', flush=True)
+
+    def copyfile(self, source, outputfile):
+        # Browsers routinely abort range requests mid-flight (seeking, zooming
+        # away from tiles). That is normal, not a server fault - don't traceback.
+        try:
+            super().copyfile(source, outputfile)
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
 
 
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
     root = sys.argv[2] if len(sys.argv) > 2 else '.'
     os.chdir(root)
-    with http.server.HTTPServer(('', port), RangeHandler) as httpd:
+    # Threaded: the multi-MB spf-data.json would otherwise block every tile
+    # request behind it on a single-threaded server.
+    with http.server.ThreadingHTTPServer(('', port), RangeHandler) as httpd:
         print(f'Serving http://localhost:{port}/ from {os.path.abspath(root)}')
         httpd.serve_forever()

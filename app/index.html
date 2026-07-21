@@ -19,9 +19,11 @@
         <h1>SPF Explorer</h1>
       </div>
       <div id="year-selector">
-        <button id="year-prev" aria-label="Previous year">&#8249;</button>
+        <span id="year-min" class="year-bound"></span>
+        <input id="year-slider" type="range" min="0" max="0" step="1" value="0"
+               aria-label="Year">
+        <span id="year-max" class="year-bound"></span>
         <span id="year-display">2025</span>
-        <button id="year-next" aria-label="Next year">&#8250;</button>
       </div>
     </header>
 

@@ -23,15 +23,16 @@ const DECILE_COLORS = {
 
 let spfData      = null;
 let decileIndex  = {};  // { year: { decile: [code, …] } }
-let currentYear  = 2025;
+let currentYear  = null;  // set from meta.years (latest) once data loads
 let selectedCode = null;
 let activeDecile = null;
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
 const yearDisplay   = document.getElementById('year-display');
-const yearPrev      = document.getElementById('year-prev');
-const yearNext      = document.getElementById('year-next');
+const yearSlider    = document.getElementById('year-slider');
+const yearMin       = document.getElementById('year-min');
+const yearMax       = document.getElementById('year-max');
 const searchInput   = document.getElementById('search-input');
 const searchResults = document.getElementById('search-results');
 const geoPlaceInput = document.getElementById('geo-place-input');
@@ -227,32 +228,33 @@ function setupLayers() {
 
 // ── Year ──────────────────────────────────────────────────────────────────────
 
+// Recolouring writes feature state for every area, so a fast scrub is coalesced
+// to at most one repaint per frame. The label still tracks the handle exactly.
+let pendingYearFrame = null;
+
 function applyYear(year) {
   currentYear = year;
   yearDisplay.textContent = year;
-  syncYearButtons();
-  if (map.getLayer('lsoa-fill')) {
-    applyYearStates(year);
-  }
+  syncYearControl();
   clearSelection();
+
+  if (!map.getLayer('lsoa-fill')) return;
+  if (pendingYearFrame !== null) cancelAnimationFrame(pendingYearFrame);
+  pendingYearFrame = requestAnimationFrame(() => {
+    pendingYearFrame = null;
+    applyYearStates(currentYear);
+  });
 }
 
-function syncYearButtons() {
-  const years = spfData.meta.years;
-  yearPrev.disabled = currentYear <= Math.min(...years);
-  yearNext.disabled = currentYear >= Math.max(...years);
+function syncYearControl() {
+  const i = spfData.meta.years.indexOf(currentYear);
+  if (i >= 0) yearSlider.value = i;
 }
 
-yearPrev.addEventListener('click', () => {
-  const years = spfData.meta.years;
-  const i = years.indexOf(currentYear);
-  if (i > 0) applyYear(years[i - 1]);
-});
-
-yearNext.addEventListener('click', () => {
-  const years = spfData.meta.years;
-  const i = years.indexOf(currentYear);
-  if (i < years.length - 1) applyYear(years[i + 1]);
+yearSlider.addEventListener('input', () => {
+  if (!spfData) return;  // slider is inert until meta.years has populated it
+  const year = spfData.meta.years[Number(yearSlider.value)];
+  if (year !== undefined && year !== currentYear) applyYear(year);
 });
 
 // ── Info panel mode ───────────────────────────────────────────────────────────
@@ -758,7 +760,7 @@ function restoreURLState() {
   if (yearParam && spfData.meta.years.includes(yearParam)) {
     currentYear = yearParam;
     yearDisplay.textContent = yearParam;
-    syncYearButtons();
+    syncYearControl();
     applyYearStates(yearParam);
   }
 
@@ -781,7 +783,13 @@ async function init() {
   if (!spfData.meta.years.includes(currentYear)) {
     currentYear = spfData.meta.years.at(-1);
   }
+
+  const years = spfData.meta.years;
+  yearSlider.max = years.length - 1;
+  yearMin.textContent = years[0];
+  yearMax.textContent = years.at(-1);
   yearDisplay.textContent = currentYear;
+  syncYearControl();
   buildDecileChips();
 
   if (map.isStyleLoaded()) {

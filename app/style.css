@@ -69,30 +69,51 @@ body {
   gap: 0.4rem;
 }
 
-#year-selector button {
-  background: rgba(255,255,255,0.12);
-  border: none;
-  color: var(--light-grey);
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1.2rem;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s;
+.year-bound {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
 }
 
-#year-selector button:hover:not(:disabled) { background: rgba(255,255,255,0.22); }
-#year-selector button:disabled { opacity: 0.35; cursor: default; }
+#year-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 130px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.22);
+  cursor: pointer;
+}
+
+#year-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--light-grey);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+#year-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--light-grey);
+  cursor: pointer;
+}
+
+#year-slider:hover::-webkit-slider-thumb { transform: scale(1.15); }
+#year-slider:focus-visible { outline: 2px solid var(--light-grey); outline-offset: 4px; }
 
 #year-display {
   font-weight: 700;
   font-size: 1rem;
   min-width: 3rem;
   text-align: center;
+  font-variant-numeric: tabular-nums;  /* stops the label jittering while scrubbing */
 }
 
 /* ── Main layout ────────────────────────────────────────── */

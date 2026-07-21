@@ -9,7 +9,7 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 OUT_DIR = DATA_DIR / "processed"
 OUT_DIR.mkdir(exist_ok=True)
 
-GPKG_RE = re.compile(r"SPF_LSOA_(\d{4})\.gpkg$", re.IGNORECASE)
+GPKG_RE = re.compile(r"SPF_LSOA_(?:level_)?(\d{4})\.gpkg$", re.IGNORECASE)
 
 rows = []
 for gpkg in sorted(DATA_DIR.glob("SPF_LSOA_*.gpkg")):
@@ -17,7 +17,7 @@ for gpkg in sorted(DATA_DIR.glob("SPF_LSOA_*.gpkg")):
     if not m:
         continue
     year = int(m.group(1))
-    print(f"Reading {gpkg.name} …")
+    print(f"Reading {gpkg.name} ...")
     gdf = gpd.read_file(
         gpkg,
         columns=["data_zone_code", "cloudprob_corrected_mean"],
@@ -32,4 +32,4 @@ if not rows:
 out = pd.concat(rows, ignore_index=True)
 out_path = OUT_DIR / "spf_all_years.csv"
 out.to_csv(out_path, index=False)
-print(f"Wrote {len(out):,} rows → {out_path}")
+print(f"Wrote {len(out):,} rows -> {out_path}")

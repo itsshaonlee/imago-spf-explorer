@@ -16,7 +16,7 @@ OUT_JSON = PROCESSED / "spf-data.json"
 
 def load_names_and_centroids() -> dict:
     """Return {data_zone_code: {name, lat, lon}} from the lookup GeoPackage."""
-    print("Loading area names and computing centroids …")
+    print("Loading area names and computing centroids ...")
     gdf = gpd.read_file(NAMES_GPKG)
     # Compute centroids in the projected CRS (EPSG:27700), then convert to WGS84
     centroids_wgs = gdf.geometry.centroid.to_crs("EPSG:4326")
@@ -51,7 +51,7 @@ def assign_deciles(df: pd.DataFrame) -> pd.DataFrame:
 
 meta = load_names_and_centroids()
 
-print("Reading spf_all_years.csv …")
+print("Reading spf_all_years.csv ...")
 df = pd.read_csv(SPF_CSV)
 
 years = sorted(df["year"].unique().tolist())
@@ -59,7 +59,7 @@ print(f"Years: {years}")
 
 areas: dict = {}
 for year, group in df.groupby("year"):
-    print(f"  Assigning deciles for {year} …")
+    print(f"  Assigning deciles for {year} ...")
     group = assign_deciles(group)
     for row in group.itertuples(index=False):
         code = row.data_zone_code
@@ -88,4 +88,4 @@ payload = {
 with open(OUT_JSON, "w", encoding="utf-8") as f:
     json.dump(payload, f, separators=(",", ":"))
 
-print(f"Wrote {len(areas):,} areas → {OUT_JSON}")
+print(f"Wrote {len(areas):,} areas -> {OUT_JSON}")
