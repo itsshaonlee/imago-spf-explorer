@@ -4,11 +4,11 @@
 
 | | |
 |---|---|
-| Version | 0.4 — deciles replaced with continuous value + percentile rank |
+| Version | 0.5 — 2017 dropped (unreliable data); 2018–2025 |
 | Status | Live on GitHub Pages |
-| Data | SPF GeoPackages 2023–2025 (Imago) · layer names vary by year (see §3.2) |
+| Data | SPF GeoPackages 2018–2025 (Imago) · layer names vary by year (see §3.2) |
 | Hosting | GitHub Pages (`itsshaonlee/imago-spf-explorer` → transfer to Imago-SDRUK) |
-| Last updated | May 2026 |
+| Last updated | July 2026 |
 
 ---
 
@@ -132,16 +132,16 @@ The resulting `lat` and `lon` are stored in `spf-data.json` for the map's `flyTo
 
 ### 3.6 spf-data.json schema
 
-Output of the build pipeline. Committed to `data/processed/spf-data.json`. Loaded once on startup, held in memory (~6–8 MB for 46,844 areas × 3 years).
+Output of the build pipeline. Committed to `data/processed/spf-data.json`. Loaded once on startup, held in memory (~15 MB raw / ~2.3 MB gzipped over the wire, for 46,844 areas × 8 years).
 
 ```json
 {
   "meta": {
-    "years": [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
-    "generated": "2026-07-21",
+    "years": [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+    "generated": "2026-07-23",
     "value_col": "cloudprob_corrected_mean",
     "code_col": "data_zone_code",
-    "value_min": 50.59,
+    "value_min": 52.62,
     "value_max": 89.06
   },
   "areas": {
