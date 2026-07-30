@@ -51,6 +51,8 @@ let selectedCode = null;
 let rangeActive  = false;
 let rangeLo      = null;
 let rangeHi      = null;
+let geoBusy      = false; // guards against overlapping geo searches
+let placeSuggestions = []; // live place-autocomplete candidates, matched by index
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
@@ -60,11 +62,12 @@ const yearMin       = document.getElementById('year-min');
 const yearMax       = document.getElementById('year-max');
 const searchInput   = document.getElementById('search-input');
 const searchResults = document.getElementById('search-results');
-const geoPlaceInput = document.getElementById('geo-place-input');
-const geoPlaceBtn   = document.getElementById('geo-place-btn');
-const geoLocateBtn  = document.getElementById('geo-locate-btn');
-const geoMsg        = document.getElementById('geo-msg');
-const geoResults    = document.getElementById('geo-results'); // lives in info-geo (right panel)
+const geoPlaceInput   = document.getElementById('geo-place-input');
+const geoPlaceBtn     = document.getElementById('geo-place-btn');
+const geoPlaceResults = document.getElementById('geo-place-results');
+const geoLocateBtn    = document.getElementById('geo-locate-btn');
+const geoMsg          = document.getElementById('geo-msg');
+const geoResults      = document.getElementById('geo-results'); // lives in info-geo (right panel)
 const rangeLoInput  = document.getElementById('range-lo');
 const rangeHiInput  = document.getElementById('range-hi');
 const rangeReadout  = document.getElementById('range-readout');
@@ -474,6 +477,7 @@ searchResults.addEventListener('click', (e) => {
 
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#search-container')) searchResults.style.display = 'none';
+  if (!e.target.closest('#geo-input-row')) geoPlaceResults.style.display = 'none';
 });
 
 // ── Geo helpers ───────────────────────────────────────────────────────────────
@@ -488,7 +492,9 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 }
 
 // Returns up to 10 closest areas in the sunniest 10% nationally (across all
-// years) within GEO_RADIUS_KM, sorted by distance.
+// years) within GEO_RADIUS_KM, sorted by distance, plus how many qualified
+// in total (dense sunny regions — e.g. the south coast — routinely have
+// far more than 10 within range).
 function findSunnyNear(lat, lon, label = 'your location') {
   geoResults.innerHTML = '';
   const candidates = [];
@@ -501,21 +507,22 @@ function findSunnyNear(lat, lon, label = 'your location') {
   }
   candidates.sort((a, b) => a.distKm - b.distKm);
   const nearest = candidates.slice(0, 10);
+  const total = candidates.length;
 
   map.flyTo({ center: [lon, lat], zoom: 11, speed: 1.4 });
 
-  if (!nearest.length) return [];
+  if (!nearest.length) return { nearest, total };
 
   selectedCode = null;
   map.setFilter('lsoa-selected', neverFilter());
   setHighlightFilter(codesFilter(nearest.map(c => c.code)));
   map.setPaintProperty('lsoa-fill', 'fill-opacity', 0.35);
 
-  const total = candidates.length;
-  geoMsg.textContent =
-    `${total} sunniest-10% area${total !== 1 ? 's' : ''} within ${GEO_RADIUS_KM} km of ${label} — fetching weather…`;
+  geoMsg.textContent = total > nearest.length
+    ? `Closest ${nearest.length} of ${total} sunniest-10% areas within ${GEO_RADIUS_KM} km of ${label} — fetching weather…`
+    : `${total} sunniest-10% area${total !== 1 ? 's' : ''} within ${GEO_RADIUS_KM} km of ${label} — fetching weather…`;
 
-  return nearest;
+  return { nearest, total };
 }
 
 function cloudIcon(cloud, isDay) {
@@ -631,12 +638,14 @@ const CLOUDY_QUIPS = {
   ],
 };
 
-function renderGeoResults(nearest, weatherData, label, country = 'england', searchWeather = null) {
+function renderGeoResults(nearest, total, weatherData, label, country = 'england', searchWeather = null) {
   const n = nearest.length;
   const searchSunny = searchWeather && searchWeather.is_day && searchWeather.cloud_cover <= 30;
 
   infoGeoTitle.textContent = `Sunny places near ${label}`;
-  geoMsg.textContent = `${n} area${n !== 1 ? 's' : ''} found — see results →`;
+  geoMsg.textContent = total > n
+    ? `Closest ${n} of ${total} found — see results →`
+    : `${n} area${n !== 1 ? 's' : ''} found — see results →`;
 
   const rows = nearest.map(({ code, area, distKm }, i) => {
     const w = weatherData[i];
@@ -669,6 +678,8 @@ function renderGeoResults(nearest, weatherData, label, country = 'england', sear
     // D) all sunniest-10% areas nearby are cloudy
     const pool = CLOUDY_QUIPS[country] || CLOUDY_QUIPS.england;
     subtitle = pool[Math.floor(Math.random() * pool.length)];
+  } else if (total > n) {
+    subtitle = `Closest ${n} of ${total} sunniest-10% areas · live cloud cover`;
   } else {
     subtitle = `${n} closest sunniest-10% area${n !== 1 ? 's' : ''} · live cloud cover`;
   }
@@ -701,6 +712,76 @@ async function geocodePlace(query) {
   };
 }
 
+// ── Live place autocomplete ──────────────────────────────────────────────────
+
+let placeSearchTimer = null;
+let placeSearchToken = 0; // discards stale responses that resolve out of order
+
+geoPlaceInput.addEventListener('input', () => {
+  clearTimeout(placeSearchTimer);
+  const q = geoPlaceInput.value.trim();
+  if (q.length < 3) {
+    geoPlaceResults.style.display = 'none';
+    geoPlaceResults.innerHTML = '';
+    return;
+  }
+  placeSearchTimer = setTimeout(() => runPlaceAutocomplete(q), 350);
+});
+
+async function runPlaceAutocomplete(q) {
+  const myToken = ++placeSearchToken;
+  let results = [];
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&countrycodes=gb&addressdetails=1`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (res.ok) results = await res.json();
+  } catch {
+    results = [];
+  }
+  if (myToken !== placeSearchToken) return; // a newer keystroke superseded this request
+
+  placeSuggestions = results.map(r => ({
+    lat: parseFloat(r.lat),
+    lon: parseFloat(r.lon),
+    name: r.display_name.split(',')[0],
+    detail: r.display_name.split(',').slice(1, 3).join(',').trim(),
+    country: parseCountry(r.address),
+  }));
+
+  if (!placeSuggestions.length) {
+    geoPlaceResults.style.display = 'none';
+    geoPlaceResults.innerHTML = '';
+    return;
+  }
+
+  geoPlaceResults.innerHTML = placeSuggestions.map((s, i) => `
+    <div class="search-result" data-index="${i}">
+      <div class="search-result-name">${s.name}</div>
+      <div class="search-result-code">${s.detail}</div>
+    </div>`).join('');
+  geoPlaceResults.style.display = 'block';
+}
+
+geoPlaceResults.addEventListener('click', async (e) => {
+  const el = e.target.closest('.search-result');
+  if (!el || geoBusy) return;
+  const s = placeSuggestions[Number(el.dataset.index)];
+  if (!s) return;
+
+  geoPlaceInput.value = s.name;
+  geoPlaceResults.style.display = 'none';
+  geoPlaceResults.innerHTML = '';
+
+  setGeoBusy(true);
+  geoMsg.textContent = 'Searching…';
+  geoResults.innerHTML = '';
+  try {
+    await runGeoSearch(s.lat, s.lon, s.name, s.country);
+  } finally {
+    setGeoBusy(false);
+  }
+});
+
 async function detectCountry(lat, lon) {
   const res = await fetch(
     `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`,
@@ -720,7 +801,7 @@ async function fetchSearchWeather(lat, lon) {
 }
 
 async function runGeoSearch(lat, lon, label = 'your location', country = 'england') {
-  const nearest = findSunnyNear(lat, lon, label);
+  const { nearest, total } = findSunnyNear(lat, lon, label);
 
   // Fetch searcher's own weather in parallel with area weather
   const searchWeatherPromise = fetchSearchWeather(lat, lon).catch(() => null);
@@ -755,15 +836,27 @@ async function runGeoSearch(lat, lon, label = 'your location', country = 'englan
       fetchWeatherForAreas(nearest),
       searchWeatherPromise,
     ]);
-    renderGeoResults(nearest, weatherData, label, country, searchWeather);
+    renderGeoResults(nearest, total, weatherData, label, country, searchWeather);
   } catch {
     geoMsg.textContent = geoMsg.textContent.replace(' — fetching weather…', '');
   }
 }
 
+// Guards all three search entry points (go/Enter, suggestion click, use-my-
+// location) against overlapping in-flight searches — each disables the
+// trigger buttons for its own duration and clears them in a finally block.
+function setGeoBusy(busy) {
+  geoBusy = busy;
+  geoPlaceBtn.disabled = busy;
+  geoLocateBtn.disabled = busy;
+}
+
 async function handlePlaceSearch() {
+  if (geoBusy) return;
   const q = geoPlaceInput.value.trim();
   if (!q) return;
+  geoPlaceResults.style.display = 'none';
+  setGeoBusy(true);
   geoMsg.textContent = 'Searching…';
   geoResults.innerHTML = '';
   try {
@@ -775,6 +868,8 @@ async function handlePlaceSearch() {
     await runGeoSearch(place.lat, place.lon, place.name, place.country);
   } catch {
     geoMsg.textContent = 'Could not search — check your connection.';
+  } finally {
+    setGeoBusy(false);
   }
 }
 
@@ -787,20 +882,28 @@ geoResults.addEventListener('click', (e) => {
 });
 
 geoLocateBtn.addEventListener('click', () => {
+  if (geoBusy) return;
   if (!navigator.geolocation) {
     geoMsg.textContent = 'Geolocation is not supported by your browser.';
     return;
   }
+  geoPlaceResults.style.display = 'none';
+  setGeoBusy(true);
   geoMsg.textContent = 'Finding your location…';
   geoResults.innerHTML = '';
   navigator.geolocation.getCurrentPosition(
     async ({ coords: { latitude: lat, longitude: lon } }) => {
-      const country = await detectCountry(lat, lon).catch(() => 'england');
-      runGeoSearch(lat, lon, 'your location', country);
+      try {
+        const country = await detectCountry(lat, lon).catch(() => 'england');
+        await runGeoSearch(lat, lon, 'your location', country);
+      } finally {
+        setGeoBusy(false);
+      }
     },
     (err) => {
       const msgs = { 1: 'Location access was denied.', 2: 'Location unavailable.', 3: 'Request timed out.' };
       geoMsg.textContent = msgs[err.code] || 'Could not determine your location.';
+      setGeoBusy(false);
     },
     { timeout: 10000 },
   );

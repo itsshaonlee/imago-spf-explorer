@@ -274,6 +274,7 @@ body {
 }
 
 .sidebar-btn:hover { opacity: 0.82; }
+.sidebar-btn:disabled, .geo-go-btn:disabled { opacity: 0.4; cursor: default; }
 
 #reset-btn { background: rgba(255,255,255,0.07); color: var(--light-grey); margin-top: auto; }
 
@@ -318,9 +319,24 @@ body {
 #search-section { display: flex; flex-direction: column; gap: 0.45rem; }
 
 #geo-input-row {
+  position: relative;
   display: flex;
   gap: 0.4rem;
   margin-bottom: 0.5rem;
+}
+
+#geo-place-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #1e1e35;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  z-index: 100;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
 }
 
 #geo-place-input {
