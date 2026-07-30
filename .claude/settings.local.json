@@ -3,7 +3,8 @@
     "allow": [
       "Bash(conda run -n raster_env python -c ' *)",
       "Bash(C:/Users/spspa/anaconda3/envs/raster_env/python.exe -c ' *)",
-      "Bash(where python *)"
+      "Bash(where python *)",
+      "Bash(python -c ' *)"
     ]
   }
 }
