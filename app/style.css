@@ -140,6 +140,50 @@ body {
 
 #sidebar-handle { display: none; }
 
+/* ── About section ──────────────────────────────────────── */
+
+#about-section {
+  background: rgba(140, 145, 168, 0.08);
+  border: 1px solid rgba(140, 145, 168, 0.25);
+  border-radius: 8px;
+}
+
+#about-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.75rem;
+  font-family: 'Figtree', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--light-grey);
+}
+
+#about-chevron {
+  transition: transform 0.15s;
+  color: var(--grey);
+}
+
+#about-toggle[aria-expanded="true"] #about-chevron { transform: rotate(180deg); }
+
+#about-content {
+  padding: 0 0.75rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--light-grey);
+}
+
+#about-content.hidden { display: none; }
+
 /* ── Map ────────────────────────────────────────────────── */
 
 #map { flex: 1; }
