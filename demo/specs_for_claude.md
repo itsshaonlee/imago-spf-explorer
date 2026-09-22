@@ -4,11 +4,11 @@
 
 | | |
 |---|---|
-| Version | 0.5 — 2017 dropped (unreliable data); 2018–2025 |
+| Version | 0.6 — About SPF card, live place autocomplete, Umami analytics |
 | Status | Live on GitHub Pages |
 | Data | SPF GeoPackages 2018–2025 (Imago) · layer names vary by year (see §3.2) |
 | Hosting | GitHub Pages (`itsshaonlee/imago-spf-explorer` → transfer to Imago-SDRUK) |
-| Last updated | July 2026 |
+| Last updated | September 2026 |
 
 ---
 
@@ -37,11 +37,15 @@ A secondary entry point — **Find sunny near me** — uses browser geolocation 
 
 - Sidebar text input accepts `data_zone_code` (e.g. `E01004190`) or area name
 - Dropdown results (max 8); selecting one flies the map to that area and triggers click behaviour
+- Guarded against the ~17.6 MB `spf-data.json` still being in flight: typing before it loads no longer throws (`spfData.areas` was read while still `null`); `runSearch()` re-runs any pending query once the data arrives
 
 ### 2.3 Find sunny near me
 
-- Button triggers browser Geolocation API
-- On success: map flies to user location, highlights areas at or above the 90th percentile (sunniest 10% nationally, computed across all years) within 10 km
+- Button triggers browser Geolocation API, or type a place/postcode and hit go/Enter
+- **Live place autocomplete:** typing 3+ characters into the place/postcode box queries Nominatim (debounced 350ms — longer than the local area search's 180ms since this hits a public API with a 1 req/sec usage policy) and shows up to 6 matches in a dropdown; a request token discards a slow response for an earlier keystroke if a later, more specific query has already resolved
+- On success: map flies to the location, highlights areas at or above the 90th percentile (sunniest 10% nationally, computed across all years) within 10 km, capped at the closest 10 shown
+- Status messages report the true total whenever it exceeds the 10 shown, e.g. "Closest 10 of 194 sunniest-10% areas within 10 km of Brighton" — both the interim and final messages previously disagreed (interim showed the full in-range count, final showed the capped-at-10 count), which looked like a bug on high-density coastal searches (Brighton 194, Eastbourne 81, Bournemouth 19 qualifying areas)
+- A `geoBusy`/`setGeoBusy()` guard covers all three entry points (go/Enter, autocomplete suggestion click, use-my-location) so overlapping searches can't race and clobber each other's UI state
 - On denial/error: polite inline message, does not block other functionality
 
 ### 2.4 Year selector
@@ -61,6 +65,11 @@ A secondary entry point — **Find sunny near me** — uses browser geolocation 
 - Dual-thumb range slider in sidebar, bounded by the dataset-wide min/max value
 - Dragging either thumb highlights all areas nationally whose *current year* value falls within `[lo, hi]`
 - Selecting an area or hitting Reset clears the range back to full bounds (inactive state)
+
+### 2.7 About SPF card
+
+- Collapsible sidebar card ("About SPF") explaining what SPF is and how the map/search tools work — onboarding text the app previously had none of
+- Collapsed by default; toggled via `#about-toggle`, state reflected in `aria-expanded`
 
 ---
 
@@ -199,6 +208,7 @@ Tiles (geometry) and data (SPF values) are kept strictly separate. Tiles are bui
 | URL state | History API `replaceState` on click/year change; parsed on load to restore state |
 | Font | Figtree via Google Fonts |
 | Default view | UK centred: `[-3.0, 55.0]`, zoom 5 |
+| Analytics | Umami page-view tracking via `https://events.imago.ac.uk/script.js`, `data-website-id` placeholder pending registration |
 
 ### 4.4 Colour ramp
 
@@ -398,3 +408,5 @@ The three-panel desktop layout collapses at viewports below 768px into a full-sc
 | ONS profile links | Removed — added little value, URL patterns differ by nation. |
 | Default year on load | 2025 (most recent). |
 | GitHub file size | `lsoa.pmtiles` is 95.35 MiB — under the 100 MiB hard limit. Warning at 50 MiB is cosmetic. |
+| Analytics provider | Umami (self-hosted at `events.imago.ac.uk`), not GA — real website ID still pending registration, placeholder committed. |
+| "Find sunny near me" result cap | Always shows the closest 10, but status text now discloses the true qualifying total when it's larger (avoids the appearance of a broken count on dense coastal searches). |
