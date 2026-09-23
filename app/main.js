@@ -88,6 +88,8 @@ const infoGeoTitle  = document.getElementById('info-geo-title');
 const infoGeoSub    = document.getElementById('info-geo-sub');
 const sidebar       = document.getElementById('sidebar');
 const sidebarHandle = document.getElementById('sidebar-handle');
+const aboutToggle   = document.getElementById('about-toggle');
+const aboutContent  = document.getElementById('about-content');
 
 // ── PMTiles URL ───────────────────────────────────────────────────────────────
 
@@ -450,6 +452,7 @@ searchInput.addEventListener('input', (e) => {
 });
 
 function runSearch(q) {
+  if (!spfData) return; // data still loading — re-run once it's ready, see init()
   const hits = [];
   for (const [code, area] of Object.entries(spfData.areas)) {
     if (code.toLowerCase().includes(q) || (area.name && area.name.toLowerCase().includes(q))) {
@@ -961,10 +964,22 @@ function restoreURLState() {
 
 sidebarHandle.addEventListener('click', () => sidebar.classList.toggle('expanded'));
 
+// ── About toggle ──────────────────────────────────────────────────────────────
+
+aboutToggle.addEventListener('click', () => {
+  const expanded = aboutContent.classList.toggle('hidden') === false;
+  aboutToggle.setAttribute('aria-expanded', String(expanded));
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
   await loadData();
+
+  // If the user typed into "Find an area" before the dataset finished
+  // loading, runSearch() bailed out silently — re-run it now data is ready.
+  const pendingQuery = searchInput.value.trim().toLowerCase();
+  if (pendingQuery) runSearch(pendingQuery);
 
   if (!spfData.meta.years.includes(currentYear)) {
     currentYear = spfData.meta.years.at(-1);
